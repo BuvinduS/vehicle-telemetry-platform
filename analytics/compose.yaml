@@ -1,0 +1,15 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: vtp-analytics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: analytics
+      POSTGRES_DB: telemetry
+    ports:
+      # 5433 on the host, not 5432 which was used for the feasibility test, this can be changed once the feasibiltiiy test is entirely decoupled
+      - "5433:5432"
+    volumes:
+      - ./db/pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d

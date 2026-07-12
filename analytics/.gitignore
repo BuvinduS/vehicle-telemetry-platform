@@ -1,0 +1,21 @@
+# Postgres/TimescaleDB data volume
+db/pgdata/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Data exports / dumps produced while exploring
+exports/
+*.csv
+*.parquet
+*.sql.gz
+mock_data_dump.sql
+
+# Env
+.env
+.venv/
+__pycache__/
+
+# vscode settings
+.vscode/
