@@ -1,0 +1,46 @@
+# Moved here from analytics/docker-compose.yml — now shared by analytics/
+# and grafana/ (and eventually pi/ services). See architecture.md §3.7.
+
+services:
+  # timescaledb:
+  #   image: timescale/timescaledb:latest-pg16
+  #   container_name: vtp-analytics-db
+  #   restart: unless-stopped
+  #   ports:
+  #     - "5433:5432"   # host-side port unchanged, for DBeaver etc.
+  #   environment:
+  #     POSTGRES_DB: telemetry
+  #     POSTGRES_USER: analytics
+  #     POSTGRES_PASSWORD: analytics
+  #   volumes:
+  #     - ./db/init:/docker-entrypoint-initdb.d
+  #     - timescaledb-data:/var/lib/postgresql/data
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: vtp-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      TIMESCALEDB_HOST: vtp-analytics-db
+      TIMESCALEDB_PORT: "5432"
+      TIMESCALEDB_DB: telemetry
+      TIMESCALEDB_USER: analytics
+      TIMESCALEDB_PASSWORD: analytics
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    networks:
+      - analytics_net
+
+volumes:
+  grafana-data:
+
+networks:
+  analytics_net:
+    external: true
+    name: analytics_default 
