@@ -10,7 +10,12 @@
         "name": "session_id",
         "type": "query",
         "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-        "query": "SELECT id FROM sessions ORDER BY started_at DESC",
+        "query": {
+          "rawSql": "SELECT id FROM sessions ORDER BY started_at DESC",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        },
         "refresh": 2,
         "includeAll": false
       }
@@ -27,6 +32,8 @@
         {
           "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
           "format": "time_series",
+          "editorMode": "code",
+          "rawQuery": true,
           "refId": "A"
         }
       ]
@@ -41,6 +48,8 @@
         {
           "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500",
           "format": "table",
+          "editorMode": "code",
+          "rawQuery": true,
           "refId": "A"
         }
       ]
