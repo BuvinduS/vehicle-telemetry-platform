@@ -2,19 +2,19 @@
 # and grafana/ (and eventually pi/ services). See architecture.md §3.7.
 
 services:
-  # timescaledb:
-  #   image: timescale/timescaledb:latest-pg16
-  #   container_name: vtp-analytics-db
-  #   restart: unless-stopped
-  #   ports:
-  #     - "5433:5432"   # host-side port unchanged, for DBeaver etc.
-  #   environment:
-  #     POSTGRES_DB: telemetry
-  #     POSTGRES_USER: analytics
-  #     POSTGRES_PASSWORD: analytics
-  #   volumes:
-  #     - ./db/init:/docker-entrypoint-initdb.d
-  #     - timescaledb-data:/var/lib/postgresql/data
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: vtp-analytics-db
+    restart: unless-stopped
+    ports:
+      - "5433:5432"   # host-side port unchanged, for DBeaver etc.
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: analytics
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d
+      - timescaledb-data:/var/lib/postgresql/data
 
   grafana:
     image: grafana/grafana:latest
@@ -34,13 +34,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
-    networks:
-      - analytics_net
 
 volumes:
   grafana-data:
-
-networks:
-  analytics_net:
-    external: true
-    name: analytics_default 
+  timescaledb-data:

@@ -50,6 +50,15 @@ WITH (timescaledb.continuous) AS
     GROUP BY bucket, session_id
 WITH NO DATA;
 
+-- Keep telemetry_1min current automatically — without this, new rows
+-- inserted into telemetry (whether from live ingestion or a manual
+-- DBeaver import) won't appear here until refresh_continuous_aggregate
+-- is called manually.
+SELECT add_continuous_aggregate_policy('telemetry_1min',
+  start_offset => INTERVAL '1 hour',
+  end_offset => INTERVAL '1 minute',
+  schedule_interval => INTERVAL '1 minute');
+
 INSERT INTO drivers (id, name) VALUES ('driver_a', 'Test Driver')
     ON CONFLICT DO NOTHING;
 

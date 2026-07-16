@@ -22,37 +22,90 @@
     ]
   },
   "panels": [
-    {
-      "id": 1,
-      "title": "Speed / RPM (1min avg)",
-      "type": "timeseries",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-      "targets": [
+  {
+    "id": 1,
+    "title": "Speed (1min avg/max)",
+    "type": "timeseries",
+    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+    "targets": [
+      {
+        "rawSql": "SELECT bucket AS \"time\", avg_speed, max_speed FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
+        "format": "time_series",
+        "editorMode": "code",
+        "rawQuery": true,
+        "refId": "A"
+      }
+    ],
+    "fieldConfig": {
+      "defaults": { "unit": "velocitykmh" }
+    }
+  },
+  {
+    "id": 2,
+    "title": "RPM (1min avg)",
+    "type": "timeseries",
+    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+    "targets": [
+      {
+        "rawSql": "SELECT bucket AS \"time\", avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
+        "format": "time_series",
+        "editorMode": "code",
+        "rawQuery": true,
+        "refId": "A"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "title": "Speed vs RPM (overlay, dual axis)",
+    "type": "timeseries",
+    "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+    "targets": [
+      {
+        "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
+        "format": "time_series",
+        "editorMode": "code",
+        "rawQuery": true,
+        "refId": "A"
+      }
+    ],
+    "fieldConfig": {
+      "defaults": { "custom": { "axisPlacement": "auto" } },
+      "overrides": [
         {
-          "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
-          "format": "time_series",
-          "editorMode": "code",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Raw telemetry (short range)",
-      "type": "table",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
-      "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-      "targets": [
+          "matcher": { "id": "byName", "options": "avg_rpm" },
+          "properties": [
+            { "id": "custom.axisPlacement", "value": "right" },
+            { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+          ]
+        },
         {
-          "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500",
-          "format": "table",
-          "editorMode": "code",
-          "rawQuery": true,
-          "refId": "A"
+          "matcher": { "id": "byName", "options": "avg_speed" },
+          "properties": [
+            { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+          ]
         }
       ]
     }
-  ]
+  },
+  {
+    "id": 4,
+    "title": "Raw telemetry (short range)",
+    "type": "table",
+    "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
+    "targets": [
+      {
+        "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500",
+        "format": "table",
+        "editorMode": "code",
+        "rawQuery": true,
+        "refId": "A"
+      }
+    ]
+  }
+]
 }
