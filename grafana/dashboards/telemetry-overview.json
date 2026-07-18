@@ -1,111 +1,804 @@
 {
-  "title": "Telemetry Overview",
-  "uid": "vtp-telemetry-overview",
-  "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 1,
-  "templating": {
-    "list": [
-      {
-        "name": "session_id",
-        "type": "query",
-        "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-        "query": {
-          "rawSql": "SELECT id FROM sessions ORDER BY started_at DESC",
-          "format": "table",
-          "editorMode": "code",
-          "rawQuery": true
-        },
-        "refresh": 2,
-        "includeAll": false
-      }
-    ]
-  },
-  "panels": [
-  {
-    "id": 1,
-    "title": "Speed (1min avg/max)",
-    "type": "timeseries",
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-    "targets": [
-      {
-        "rawSql": "SELECT bucket AS \"time\", avg_speed, max_speed FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
-        "format": "time_series",
-        "editorMode": "code",
-        "rawQuery": true,
-        "refId": "A"
-      }
-    ],
-    "fieldConfig": {
-      "defaults": { "unit": "velocitykmh" }
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "vtp-telemetry-overview",
+    "namespace": "default",
+    "uid": "ff035648-4435-4975-acff-df82bc2e2f86",
+    "resourceVersion": "1784405443577009",
+    "generation": 3,
+    "creationTimestamp": "2026-07-16T12:37:54Z",
+    "labels": {
+      "grafana.app/deprecatedInternalID": "1575041380073472"
+    },
+    "annotations": {
+      "grafana.app/createdBy": "access-policy:service",
+      "grafana.app/managedBy": "classic-file-provisioning",
+      "grafana.app/managerId": "Telemetry",
+      "grafana.app/sourceChecksum": "8f7ec97c04b1308aff4f19cd560c2124",
+      "grafana.app/sourcePath": "/var/lib/grafana/dashboards/telemetry-overview.json",
+      "grafana.app/sourceTimestamp": "1784405440000",
+      "grafana.app/updatedBy": "access-policy:service",
+      "grafana.app/updatedTimestamp": "2026-07-18T20:10:43Z",
+      "grafana.app/folder": ""
     }
   },
-  {
-    "id": 2,
-    "title": "RPM (1min avg)",
-    "type": "timeseries",
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-    "targets": [
+  "spec": {
+    "annotations": [
       {
-        "rawSql": "SELECT bucket AS \"time\", avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
-        "format": "time_series",
-        "editorMode": "code",
-        "rawQuery": true,
-        "refId": "A"
-      }
-    ]
-  },
-  {
-    "id": 3,
-    "title": "Speed vs RPM (overlay, dual axis)",
-    "type": "timeseries",
-    "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
-    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-    "targets": [
-      {
-        "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket",
-        "format": "time_series",
-        "editorMode": "code",
-        "rawQuery": true,
-        "refId": "A"
-      }
-    ],
-    "fieldConfig": {
-      "defaults": { "custom": { "axisPlacement": "auto" } },
-      "overrides": [
-        {
-          "matcher": { "id": "byName", "options": "avg_rpm" },
-          "properties": [
-            { "id": "custom.axisPlacement", "value": "right" },
-            { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
-          ]
-        },
-        {
-          "matcher": { "id": "byName", "options": "avg_speed" },
-          "properties": [
-            { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
-          ]
+        "kind": "AnnotationQuery",
+        "spec": {
+          "builtIn": true,
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "query": {
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "group": "grafana",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
         }
-      ]
-    }
-  },
-  {
-    "id": 4,
-    "title": "Raw telemetry (short range)",
-    "type": "table",
-    "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
-    "datasource": { "type": "postgres", "uid": "TimescaleDB" },
-    "targets": [
+      }
+    ],
+    "cursorSync": "Off",
+    "editable": true,
+    "elements": {
+      "panel-1": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "TimescaleDB"
+                      },
+                      "group": "postgres",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "editorMode": "code",
+                        "format": "time_series",
+                        "rawQuery": true,
+                        "rawSql": "SELECT bucket AS \"time\", avg_speed, max_speed FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 1,
+          "links": [],
+          "title": "Speed (1min avg/max)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "velocitykmh"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "TimescaleDB"
+                      },
+                      "group": "postgres",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "editorMode": "code",
+                        "format": "time_series",
+                        "rawQuery": true,
+                        "rawSql": "SELECT bucket AS \"time\", avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 2,
+          "links": [],
+          "title": "RPM (1min avg)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-3": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "TimescaleDB"
+                      },
+                      "group": "postgres",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "editorMode": "code",
+                        "format": "time_series",
+                        "rawQuery": true,
+                        "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 3,
+          "links": [],
+          "title": "Speed vs RPM (overlay, dual axis)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "avg_rpm"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.axisPlacement",
+                        "value": "right"
+                      },
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "avg_speed"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "blue",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-4": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "TimescaleDB"
+                      },
+                      "group": "postgres",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 4,
+          "links": [],
+          "title": "Raw telemetry (short range)",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "align": "auto",
+                    "cellOptions": {
+                      "type": "auto"
+                    },
+                    "footer": {
+                      "reducers": []
+                    },
+                    "inspect": false
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "cellHeight": "sm",
+                "showHeader": true
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "TimescaleDB"
+                      },
+                      "group": "grafana-postgresql-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "telemetry",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT accel_x, accel_y\nFROM telemetry\nWHERE session_id = '$session_id' AND $__timeFilter(time)\nORDER BY time\nLIMIT 2000",
+                        "sql": {
+                          "columns": [
+                            {
+                              "parameters": [],
+                              "type": "function"
+                            }
+                          ],
+                          "groupBy": [
+                            {
+                              "property": {
+                                "type": "string"
+                              },
+                              "type": "groupBy"
+                            }
+                          ],
+                          "limit": 50
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 6,
+          "links": [],
+          "title": "New panelG-Force (lateral vs longitudinal)",
+          "vizConfig": {
+            "group": "xychart",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "fillOpacity": 50,
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "pointShape": "circle",
+                    "pointSize": {
+                      "fixed": 2
+                    },
+                    "pointStrokeWidth": 1,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "show": "points"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "mapping": "manual",
+                "series": [
+                  {
+                    "frame": {
+                      "matcher": {
+                        "id": "byIndex",
+                        "options": 0
+                      }
+                    },
+                    "x": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "accel_x"
+                      }
+                    },
+                    "y": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "accel_y"
+                      }
+                    }
+                  }
+                ],
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "GridLayout",
+      "spec": {
+        "items": [
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-1"
+              },
+              "height": 8,
+              "width": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-2"
+              },
+              "height": 8,
+              "width": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-3"
+              },
+              "height": 8,
+              "width": 24,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-6"
+              },
+              "height": 8,
+              "width": 24,
+              "x": 0,
+              "y": 16
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-4"
+              },
+              "height": 9,
+              "width": 24,
+              "x": 0,
+              "y": 24
+            }
+          }
+        ]
+      }
+    },
+    "links": [],
+    "liveNow": false,
+    "preload": false,
+    "tags": [],
+    "timeSettings": {
+      "autoRefresh": "",
+      "autoRefreshIntervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "fiscalYearStartMonth": 0,
+      "from": "now-6h",
+      "hideTimepicker": false,
+      "timezone": "browser",
+      "to": "now"
+    },
+    "title": "Telemetry Overview",
+    "variables": [
       {
-        "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500",
-        "format": "table",
-        "editorMode": "code",
-        "rawQuery": true,
-        "refId": "A"
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "multi": false,
+          "name": "session_id",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "TimescaleDB"
+            },
+            "group": "postgres",
+            "kind": "DataQuery",
+            "spec": {
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT id FROM sessions ORDER BY started_at DESC"
+            },
+            "version": "v0"
+          },
+          "refresh": "onTimeRangeChanged",
+          "regex": "",
+          "regexApplyTo": "value",
+          "skipUrlSync": false,
+          "sort": "disabled"
+        }
       }
     ]
   }
-]
 }
