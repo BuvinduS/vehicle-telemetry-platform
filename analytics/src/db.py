@@ -31,6 +31,13 @@ _DB_URL = (
 # per query.
 _engine = create_engine(_DB_URL)
 
+# Display timezone — the DB stores everything as UTC internally
+# (TIMESTAMPTZ), which is correct and shouldn't change. This is purely
+# about what query() hands back for display/plotting, so notebooks,
+# Grafana (set to the same tz in its dashboard settings), and DBeaver
+# (already showing local time) all agree on wall-clock time.
+DISPLAY_TZ = os.environ.get("DISPLAY_TZ", "Asia/Colombo")
+
 
 def get_engine():
     """Return the shared SQLAlchemy engine for the analytics dev DB."""
@@ -38,5 +45,13 @@ def get_engine():
 
 
 def query(sql: str, params=None) -> pd.DataFrame:
-    """Run a query and return the result as a DataFrame."""
-    return pd.read_sql(sql, _engine, params=params)
+    """Run a query and return the result as a DataFrame, with any
+    datetime columns converted to DISPLAY_TZ for consistent display
+    across notebooks/Grafana/DBeaver."""
+    df = pd.read_sql(sql, _engine, params=params)
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            if df[col].dt.tz is None:
+                df[col] = df[col].dt.tz_localize("UTC")
+            df[col] = df[col].dt.tz_convert(DISPLAY_TZ)
+    return df
