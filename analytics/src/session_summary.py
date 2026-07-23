@@ -14,23 +14,38 @@ from src.db import query
 
 
 def list_sessions() -> pd.DataFrame:
-    """All sessions with a row count, so callers don't have to hardcode
-    session IDs that may not exist anymore after a data refresh."""
+    """All sessions with a row count, computed via time-range join
+    rather than a stored session_id — this is the query pattern from
+    architecture.md §3.3 / schema-reference.md's planned schema, and
+    works whether or not telemetry.session_id still exists in the
+    table (it's simply not referenced)."""
     return query(
         """
-        SELECT s.id AS session_id, s.driver_id, s.started_at, s.notes,
-               COUNT(t.time) AS row_count
+        SELECT s.id AS session_id, s.driver_id, s.started_at, s.ended_at,
+               s.notes, COUNT(t.time) AS row_count
         FROM sessions s
-        LEFT JOIN telemetry t ON t.session_id = s.id
-        GROUP BY s.id, s.driver_id, s.started_at, s.notes
+        LEFT JOIN telemetry t
+          ON t.time BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())
+        GROUP BY s.id, s.driver_id, s.started_at, s.ended_at, s.notes
         ORDER BY s.started_at;
         """
     )
 
 
 def load_session_telemetry(session_id: str) -> pd.DataFrame:
+    """Telemetry for one session, via time-range join against
+    sessions.started_at/ended_at — NOT a session_id equality filter.
+    An open session (ended_at IS NULL) is treated as covering up to
+    NOW(), per architecture.md §3.3."""
     return query(
-        "SELECT * FROM telemetry WHERE session_id = %(session_id)s ORDER BY time;",
+        """
+        SELECT t.*
+        FROM telemetry t
+        JOIN sessions s
+          ON t.time BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())
+        WHERE s.id = %(session_id)s
+        ORDER BY t.time;
+        """,
         params={"session_id": session_id},
     )
 
