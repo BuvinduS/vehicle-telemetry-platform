@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* ---- raw palettes, one block per mode (R G B triplets) ---- */
+:root,
+[data-mode="sport"] {
+  --raw-bg: 10 10 10;
+  --raw-panel: 22 22 22;
+  --raw-panel-raised: 29 29 29;
+  --raw-hairline: 42 42 42;
+  --raw-ink: 242 240 237;
+  --raw-ink-dim: 154 154 154;
+  --raw-ink-faint: 92 92 92;
+  --raw-accent: 225 6 0;       /* racing red */
+  --raw-accent-ink: 255 255 255;
+  --raw-accent-secondary: 140 122 107;
+  --raw-danger: 255 59 48;
+  --raw-good: 62 207 74;
+}
+
+[data-mode="eco"] {
+  --raw-bg: 10 13 16;
+  --raw-panel: 18 23 28;
+  --raw-panel-raised: 23 30 36;
+  --raw-hairline: 34 48 58;
+  --raw-ink: 234 244 250;
+  --raw-ink-dim: 140 163 176;
+  --raw-ink-faint: 82 100 110;
+  --raw-accent: 0 168 232;      /* electric blue */
+  --raw-accent-ink: 10 13 16;
+  --raw-accent-secondary: 63 191 166;
+  --raw-danger: 255 76 76;
+  --raw-good: 62 207 74;
+}
+
+[data-mode="track"] {
+  --raw-bg: 0 0 0;
+  --raw-panel: 13 13 13;
+  --raw-panel-raised: 19 19 19;
+  --raw-hairline: 38 38 38;
+  --raw-ink: 255 255 255;
+  --raw-ink-dim: 171 171 171;
+  --raw-ink-faint: 94 94 94;
+  --raw-accent: 255 255 255;    /* stripped-down, white as the only accent */
+  --raw-accent-ink: 0 0 0;
+  --raw-accent-secondary: 138 138 138;
+  --raw-danger: 255 45 45;
+  --raw-good: 52 208 88;
+}
+
+[data-mode="comfort"] {
+  --raw-bg: 26 24 22;
+  --raw-panel: 34 31 28;
+  --raw-panel-raised: 42 38 34;
+  --raw-hairline: 58 53 48;
+  --raw-ink: 237 230 220;
+  --raw-ink-dim: 176 169 156;
+  --raw-ink-faint: 110 103 92;
+  --raw-accent: 216 155 74;     /* muted amber */
+  --raw-accent-ink: 26 24 22;
+  --raw-accent-secondary: 143 174 153;
+  --raw-danger: 214 86 74;
+  --raw-good: 111 174 107;
+}
+
+/* ---- semantic tokens Tailwind actually generates utilities from ---- */
+@theme inline {
+  --color-bg: rgb(var(--raw-bg));
+  --color-panel: rgb(var(--raw-panel));
+  --color-panel-raised: rgb(var(--raw-panel-raised));
+  --color-hairline: rgb(var(--raw-hairline));
+  --color-ink: rgb(var(--raw-ink));
+  --color-ink-dim: rgb(var(--raw-ink-dim));
+  --color-ink-faint: rgb(var(--raw-ink-faint));
+  --color-accent: rgb(var(--raw-accent));
+  --color-accent-ink: rgb(var(--raw-accent-ink));
+  --color-accent-secondary: rgb(var(--raw-accent-secondary));
+  --color-danger: rgb(var(--raw-danger));
+  --color-good: rgb(var(--raw-good));
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+}
