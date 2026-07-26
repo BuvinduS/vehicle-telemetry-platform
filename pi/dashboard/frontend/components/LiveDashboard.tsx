@@ -5,6 +5,7 @@ import NumericReadout from "@/components/NumericReadout";
 import Thermometer from "@/components/Thermometer";
 import GForcePanel from "@/components/GForcePanel";
 import { useTelemetryContext } from "@/lib/telemetry-context";
+import SessionPanel from "@/components/SessionPanel";
 
 export default function LiveDashboard() {
   const { telemetry, latencyMs, avgIntervalMs } = useTelemetryContext();
@@ -37,7 +38,9 @@ export default function LiveDashboard() {
           <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={380} />
         </div>
 
-        <div />
+        <div className="justify-self-end pr-4">
+          <SessionPanel />
+        </div>
       </div>
 
       {process.env.NODE_ENV !== "production" && (
