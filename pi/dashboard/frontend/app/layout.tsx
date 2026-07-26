@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import {ModeProvider, NO_FLASH_SCRIPT} from "@/lib/mode";
+import { TelemetryProvider } from "@/lib/telemetry-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>
-        <ModeProvider>{children}</ModeProvider>
+        <ModeProvider><TelemetryProvider>{children}</TelemetryProvider></ModeProvider>
       </body>
     </html>
   );

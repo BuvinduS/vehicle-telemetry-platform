@@ -1,13 +1,13 @@
 "use client";
 
-import { useTelemetry } from "@/lib/useTelemetry";
 import ArcGauge from "@/components/ArcGauge";
 import NumericReadout from "@/components/NumericReadout";
 import Thermometer from "@/components/Thermometer";
 import GForcePanel from "@/components/GForcePanel";
+import { useTelemetryContext } from "@/lib/telemetry-context";
 
 export default function LiveDashboard() {
-  const { telemetry, latencyMs, avgIntervalMs } = useTelemetry();
+  const { telemetry, latencyMs, avgIntervalMs } = useTelemetryContext();
   const t = telemetry;
 
   return (
@@ -42,8 +42,8 @@ export default function LiveDashboard() {
 
       {process.env.NODE_ENV !== "production" && (
         <div className="fixed bottom-2 right-2 text-xs font-mono text-ink-dim bg-panel border border-hairline rounded px-2 py-1">
-          latency: {latencyMs !== null ? `${latencyMs.toFixed(0)}ms` : "--"} · interval:{" "}
-          {avgIntervalMs !== null ? `${avgIntervalMs.toFixed(0)}ms` : "--"}
+          latency: {latencyMs != null ? `${latencyMs.toFixed(0)}ms` : "--"} · interval:{" "}
+          {avgIntervalMs != null ? `${avgIntervalMs.toFixed(0)}ms` : "--"}
         </div>
       )}
     </>
