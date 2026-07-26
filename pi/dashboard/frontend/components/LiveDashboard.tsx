@@ -7,9 +7,12 @@ import GForcePanel from "@/components/GForcePanel";
 import SessionPanel from "@/components/SessionPanel";
 import CollapsiblePanel from "@/components/CollapsiblePanel";
 import { useTelemetryContext } from "@/lib/telemetry-context";
+import { useViewMode } from "@/lib/view-mode";
+import AdvancedTable from "@/components/AdvancedTable";
 
 export default function LiveDashboard() {
   const { telemetry, latencyMs, avgIntervalMs } = useTelemetryContext();
+  const { viewMode } = useViewMode();
   const t = telemetry;
 
   return (
@@ -27,8 +30,14 @@ export default function LiveDashboard() {
         </div>
 
         <div className="flex-1 flex items-center justify-center gap-12 mt-60">
-          <ArcGauge label="Speed" value={t?.speed_kmh ?? null} min={0} max={220} unit="km/h" size={460} />
-          <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={460} />
+          {viewMode === "normal" ? (
+            <>
+              <ArcGauge label="Speed" value={t?.speed_kmh ?? null} min={0} max={220} unit="km/h" size={460} />
+              <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={460} />
+            </>
+          ) : (
+            <AdvancedTable />
+          )}
         </div>
 
         <div className="pr-4">

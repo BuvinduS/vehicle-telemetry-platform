@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ModeSwitcher from "./ModeSwitcher";
 import { useTelemetryContext } from "@/lib/telemetry-context";
+import ViewToggle from "./ViewToggle";
 
 const STATUS_COPY: Record<string, { label: string; color: string; pulse: boolean }> = {
   connecting: { label: "CONNECTING", color: "var(--color-ink-dim)", pulse: true },
@@ -53,6 +54,7 @@ export default function StatusBar() {
         <span className="text-sm tabular-nums text-ink-dim" style={{ fontFamily: "var(--font-geist-mono)" }}>
           {clock}
         </span>
+        <ViewToggle/>
         <ModeSwitcher />
       </div>
     </div>
