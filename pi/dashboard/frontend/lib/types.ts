@@ -28,9 +28,19 @@ export interface Session {
   notes: string | null;
 }
 
+export interface VehicleInfo {
+  vin: string | null;
+  make: string | null;
+  model: string | null;
+  year: string | null;
+}
+
+
 export type WsMessage =
   | { type: "telemetry"; data: TelemetryData }
   | { type: "advanced_pids"; ts: number; data: AdvancedPidsData }
-  | { type: "active_sessions"; data: Session[] };
+  | { type: "active_sessions"; data: Session[] }
+  | { type: "vehicle_info"; data: VehicleInfo };
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "reconnecting";
+

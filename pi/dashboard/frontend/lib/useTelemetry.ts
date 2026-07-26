@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { wsUrl } from "./config";
-import type { TelemetryData, AdvancedPidsData, Session, ConnectionStatus, WsMessage } from "./types";
+import type { TelemetryData, AdvancedPidsData, Session, ConnectionStatus, WsMessage, VehicleInfo } from "./types";
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
@@ -23,6 +23,8 @@ export function useTelemetry() {
   const messageTimes = useRef<number[]>([]);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [avgIntervalMs, setAvgIntervalMs] = useState<number | null>(null);
+
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleInfo | null>(null);
 
 
   const lastTelemetryAgeMs = useCallback(() => {
@@ -73,6 +75,9 @@ export function useTelemetry() {
           case "active_sessions":
             setActiveSessions(msg.data);
             break;
+          case "vehicle_info":
+            setVehicleInfo(msg.data);
+            break;
         }
       };
 
@@ -96,5 +101,5 @@ export function useTelemetry() {
     };
   }, []);
 
-  return { status, telemetry, advancedPids, advancedPidsTs, activeSessions, lastTelemetryAgeMs, avgIntervalMs, latencyMs };
+  return { status, telemetry, advancedPids, advancedPidsTs, activeSessions, vehicleInfo, latencyMs, avgIntervalMs, lastTelemetryAgeMs };
 }

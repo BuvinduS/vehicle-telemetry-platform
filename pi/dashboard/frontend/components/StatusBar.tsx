@@ -12,8 +12,9 @@ const STATUS_COPY: Record<string, { label: string; color: string; pulse: boolean
 };
 
 export default function StatusBar() {
-  const { status } = useTelemetryContext();
+  const { status, vehicleInfo } = useTelemetryContext();
   const [clock, setClock] = useState("");
+  
 
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString(undefined, { hour12: false }));
@@ -26,18 +27,26 @@ export default function StatusBar() {
 
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{
-            backgroundColor: s.color,
-            boxShadow: `0 0 6px 1px ${s.color}`,
-            animation: s.pulse ? "pulse-status 1.6s ease-in-out infinite" : "none",
-          }}
-        />
-        <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: s.color }}>
-          {s.label}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ /* unchanged */ }} />
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: s.color }}>
+            {s.label}
+          </span>
+        </div>
+
+        <span className="text-xl font-semibold tracking-wide text-ink">
+          Vehicle Telemetry Platform
         </span>
+
+        {vehicleInfo?.vin && (
+          <span
+            className="text-xs tabular-nums text-ink-faint"
+            style={{ fontFamily: "var(--font-geist-mono)" }}
+          >
+            VIN {vehicleInfo.vin}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-6">
