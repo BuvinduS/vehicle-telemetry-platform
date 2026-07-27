@@ -69,7 +69,7 @@
                         "editorMode": "code",
                         "format": "time_series",
                         "rawQuery": true,
-                        "rawSql": "SELECT bucket AS \"time\", avg_speed, max_speed FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                        "rawSql": "SELECT t.bucket AS \"time\", t.avg_speed, t.max_speed\nFROM telemetry_1min t\nJOIN sessions s ON s.id = '$session_id' AND t.bucket BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())\nWHERE $__timeFilter(t.bucket)\nORDER BY t.bucket"
                       },
                       "version": "v0"
                     },
@@ -190,7 +190,7 @@
                         "editorMode": "code",
                         "format": "time_series",
                         "rawQuery": true,
-                        "rawSql": "SELECT bucket AS \"time\", avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                        "rawSql": "SELECT t.bucket AS \"time\", t.avg_rpm\nFROM telemetry_1min t\nJOIN sessions s ON s.id = '$session_id' AND t.bucket BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())\nWHERE $__timeFilter(t.bucket)\nORDER BY t.bucket"
                       },
                       "version": "v0"
                     },
@@ -310,7 +310,7 @@
                         "editorMode": "code",
                         "format": "time_series",
                         "rawQuery": true,
-                        "rawSql": "SELECT bucket AS \"time\", avg_speed, avg_rpm FROM telemetry_1min WHERE session_id = '$session_id' AND $__timeFilter(bucket) ORDER BY bucket"
+                        "rawSql": "SELECT t.bucket AS \"time\", t.avg_speed, t.avg_rpm\nFROM telemetry_1min t\nJOIN sessions s ON s.id = '$session_id' AND t.bucket BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())\nWHERE $__timeFilter(t.bucket)\nORDER BY t.bucket"
                       },
                       "version": "v0"
                     },
@@ -465,7 +465,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT time, speed_kmh, rpm, throttle_pct, coolant_temp_c, engine_load_pct FROM telemetry WHERE session_id = '$session_id' AND $__timeFilter(time) ORDER BY time DESC LIMIT 500"
+                        "rawSql": "SELECT t.time, t.speed_kmh, t.rpm, t.throttle_pct, t.coolant_temp_c, t.engine_load_pct\nFROM telemetry t\nJOIN sessions s ON s.id = '$session_id' AND t.time BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())\nWHERE $__timeFilter(t.time)\nORDER BY t.time DESC\nLIMIT 500"
                       },
                       "version": "v0"
                     },
@@ -544,7 +544,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT accel_x, accel_y\nFROM telemetry\nWHERE session_id = '$session_id' AND $__timeFilter(time)\nORDER BY time\nLIMIT 2000",
+                        "rawSql": "SELECT t.accel_x, t.accel_y\nFROM telemetry t\nJOIN sessions s ON s.id = '$session_id' AND t.time BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())\nWHERE $__timeFilter(t.time)\nORDER BY t.time\nLIMIT 2000",
                         "sql": {
                           "columns": [
                             {

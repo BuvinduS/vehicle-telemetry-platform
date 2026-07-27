@@ -3,6 +3,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import db, mqtt_bridge
 from .routers import sessions, ws
@@ -19,6 +20,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Vehicle Telemetry Platform API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3001"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(sessions.router)
 app.include_router(ws.router)
 
