@@ -19,3 +19,9 @@ __pycache__/
 
 # vscode settings
 .vscode/
+
+# dataset
+analytics/dataset/raw/*
+!analytics/dataset/raw/README.md
+analytics/dataset/processed/
+analytics/models/*.pkl
