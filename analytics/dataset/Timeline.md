@@ -1,0 +1,1 @@
+- Unzipped the dataset and verified the md5 checksum.
