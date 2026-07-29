@@ -75,4 +75,59 @@ Data pipeline between the DB, the analytics subsystem and Grafana is functional.
     - Subscriptions to the relavant MQTT topics at `telemetry/vehicle/obd` and `telemetry/vehicle/imu` to obtain and parse the data sent.
     - WebSocket implemented for the frontend to connect, with CORS enabled.
 - Ingestor implemented to feed the data in to the database.
-- Both the ingestor and the FastAPI backend obtains the same data stream(via MQTT) but processes the independantly.
+- Both the ingestor and the FastAPI backend obtains the same data stream(via MQTT) but processes the independantly. Diagram below.
+
+``` mermaid 
+flowchart TB
+    %% Data Sources
+    S1[telemetry/vehicle/obd]
+    S2[telemetry/vehicle/imu]
+
+    %% MQTT Broker
+    MQTT[(MQTT Broker)]
+
+    %% Subscribers
+    S1 --> MQTT
+    S2 --> MQTT
+
+    %% Ingestor Pipeline
+    subgraph Ingestion["Historical Data Pipeline"]
+        ING[Ingestor<br/>MQTT Subscriber]
+        MERGE1[Merge Two Streams]
+        TSDB[(TimescaleDB)]
+        GRAF[Grafana]
+    end
+
+    %% Live Pipeline
+    subgraph Live["Live Streaming Pipeline"]
+        API[FastAPI Bridge<br/>MQTT Subscriber]
+        MERGE2[In-Memory Merge]
+        WS[WebSocket Server]
+        NEXT[Next.js Frontend]
+    end
+
+    %% Historical Flow
+    MQTT --> ING
+    ING --> MERGE1
+    MERGE1 --> TSDB
+    TSDB --> GRAF
+
+    %% Live Flow
+    MQTT --> API
+    API --> MERGE2
+    MERGE2 --> WS
+    WS --> NEXT
+```
+
+**Web Dashboard Front-end**
+- A NextJS front-end that connectes to the backend 
+    - Gauges from Speed and RPM.
+    - Numerical displays for Throttle, engine load and coolant temperature. 
+    - A g-g diagram for GForce output.
+    - Four different themes for visual clarity.
+
+    <p align="center">
+        <img src="images/nextjs_front.png" alt="Dashboard Frontend" width="800">
+        <br>
+        <em>NextJS real-time dashboard front-end</em>
+    </p>
