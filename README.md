@@ -51,3 +51,83 @@ Data pipeline between the DB, the analytics subsystem and Grafana is functional.
 - Data acquisition from a real vehicle could not be started. 
 - Testing the MCP2515 implementation with a vehicle could not be started.
 - No logical relationships can be yet obtained from the analysis subsystem due to everything still running on mock data.
+
+### Week 4
+
+**Week 4 involved a schema migration**
+- Sessions and telemetry decoupled from each other with the new schema.
+- Telemetry database entries no longer have a associated `session_id`.
+- The a new column for `node_id` was added. This is planned to correspond to the MAC address of the ESP32 which drives each telemetry node. MAC retrival is not yet implemented.
+- Sessions are now purely start and end time stamps, these operate as windows over the recorded data in the telemetry database. They are used to fetch data via time range joins.
+- Overlapping sessions as well as on-going sessions are allowed.
+- Necessary changes made in the **Grafana**, **Analytics** subsystems to align with the database schema migration.
+
+**Analytics sub-system**
+- New `session_summary.py` script added to compute per-session telemetry statistics
+- `02_session_summary.ipynb` notebook to plot graphs and analyse the the session summaries.
+
+**Grafana sub-system**
+- Dashboard JSON was updated to align with the schema migration, this simply involved chaning the raw SQL queries to facilitate a time range join.
+
+**Web Dashboard Back-end**
+- A FastAPI based back-end created with the necessary routers, to facilitate
+    - Session creation, termination and viewing
+    - Subscriptions to the relavant MQTT topics at `telemetry/vehicle/obd` and `telemetry/vehicle/imu` to obtain and parse the data sent.
+    - WebSocket implemented for the frontend to connect, with CORS enabled.
+- Ingestor implemented to feed the data in to the database.
+- Both the ingestor and the FastAPI backend obtains the same data stream(via MQTT) but processes the independantly. Diagram below.
+
+``` mermaid 
+flowchart TB
+    %% Data Sources
+    S1[telemetry/vehicle/obd]
+    S2[telemetry/vehicle/imu]
+
+    %% MQTT Broker
+    MQTT[(MQTT Broker)]
+
+    %% Subscribers
+    S1 --> MQTT
+    S2 --> MQTT
+
+    %% Ingestor Pipeline
+    subgraph Ingestion["Historical Data Pipeline"]
+        ING[Ingestor<br/>MQTT Subscriber]
+        MERGE1[Merge Two Streams]
+        TSDB[(TimescaleDB)]
+        GRAF[Grafana]
+    end
+
+    %% Live Pipeline
+    subgraph Live["Live Streaming Pipeline"]
+        API[FastAPI Bridge<br/>MQTT Subscriber]
+        MERGE2[In-Memory Merge]
+        WS[WebSocket Server]
+        NEXT[Next.js Frontend]
+    end
+
+    %% Historical Flow
+    MQTT --> ING
+    ING --> MERGE1
+    MERGE1 --> TSDB
+    TSDB --> GRAF
+
+    %% Live Flow
+    MQTT --> API
+    API --> MERGE2
+    MERGE2 --> WS
+    WS --> NEXT
+```
+
+**Web Dashboard Front-end**
+- A NextJS front-end that connectes to the backend 
+    - Gauges from Speed and RPM.
+    - Numerical displays for Throttle, engine load and coolant temperature. 
+    - A g-g diagram for GForce output.
+    - Four different themes for visual clarity.
+
+    <p align="center">
+        <img src="images/nextjs_front.png" alt="Dashboard Frontend" width="800">
+        <br>
+        <em>NextJS real-time dashboard front-end</em>
+    </p>
