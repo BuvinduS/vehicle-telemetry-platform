@@ -24,19 +24,24 @@ RANDOM_SEED = 42  # same seed used for the train/val split, for consistency
 def summarize_predictions(name: str, model: IsolationForest, df: pd.DataFrame):
     """
     predict() returns 1 for 'normal' (inlier), -1 for 'anomalous'
-    (outlier). decision_function() gives the underlying continuous
-    score the +-1 label is thresholded from — negative means anomalous,
-    positive means normal, magnitude reflects how confidently so.
+    (outlier), thresholded from decision_function()'s continuous score
+    (negative = anomalous, positive = normal). contamination='auto'
+    sets that threshold via a formula from the original paper — it is
+    NOT a target percentage, and can land anywhere depending on how
+    spread out this particular dataset's scores are. So don't just
+    trust the +-1 label yet; look at the actual score distribution.
     """
     X = df[FEATURE_COLS]
     preds = model.predict(X)
     scores = model.decision_function(X)
 
     pct_anomalous = (preds == -1).mean() * 100
+    percentiles = pd.Series(scores).describe(percentiles=[0.01, 0.05, 0.1, 0.5, 0.9])
     print(f"{name}: {len(df):,} rows, {df['trip_id'].nunique()} trips "
-          f"-> {pct_anomalous:.1f}% flagged anomalous "
-          f"(score range {scores.min():.3f} to {scores.max():.3f}, "
-          f"mean {scores.mean():.3f})")
+          f"-> {pct_anomalous:.1f}% flagged anomalous (auto threshold)")
+    print(f"  score percentiles: 1%={percentiles['1%']:.3f}  "
+          f"5%={percentiles['5%']:.3f}  10%={percentiles['10%']:.3f}  "
+          f"50%={percentiles['50%']:.3f}  90%={percentiles['90%']:.3f}")
 
 
 if __name__ == "__main__":
@@ -62,7 +67,7 @@ if __name__ == "__main__":
     )
     model.fit(train_df[FEATURE_COLS])
 
-    print("=== Sanity checks (not formal validation) ===\n")
+    print("=== Sanity checks (not formal validation — that's step 5) ===\n")
 
     summarize_predictions("Train (seen during fitting)", model, train_df)
     summarize_predictions("Validation (held-out normal trips)", model, val_df)
