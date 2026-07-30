@@ -1,0 +1,11 @@
+{
+  "threshold": -0.12302857513583185,
+  "target_fpr_pct": 2.0,
+  "actual_fpr_pct": 2.0000477338361295,
+  "feature_cols": [
+    "coolant_temp_c_dev",
+    "rpm_dev",
+    "speed_kmh"
+  ],
+  "note": "score < threshold means anomalous. Chosen from val-set FPR/detection tradeoff, not sklearn's contamination='auto'."
+}
