@@ -1,1 +1,3 @@
 - Unzipped the dataset and verified the md5 checksum.
+- Resolved temperature mojibake.
+- Loaded one csv file to verify the loader.

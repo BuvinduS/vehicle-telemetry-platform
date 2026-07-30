@@ -2,7 +2,7 @@
 kit_loader.py — loads ONE KIT OBD-II trip CSV into a clean DataFrame.
 
 Step 1 of the anomaly-detection pipeline: prove the loader works on a
-single file before scaling to all 81.
+single file before scaling to all 81. See architecture.md §3.13.
 """
 
 import re
@@ -13,7 +13,7 @@ import pandas as pd
 
 # Maps the KIT dataset's verbose column headers to our own schema's
 # naming convention (rpm, coolant_temp_c, etc.) — same style as
-# mqtt-topics payload field names, so downstream code reads the
+# mqtt-topics.md's payload field names, so downstream code reads the
 # same field names regardless of which dataset it came from.
 COLUMN_RENAME = {
     "Time": "time_str",
@@ -30,9 +30,15 @@ COLUMN_RENAME = {
 }
 
 # Filenames look like: 2018-03-21_Seat_Leon_KA_RT_Normal.csv
-# We only need the date out of this for now (condition label parsing
-# comes later, once we're working across all 81 files).
 FILENAME_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_")
+
+# The last underscore-separated token before ".csv" is KIT's condition
+# label. Most are "Normal"/"Frei"/"Stau" (ordinary driving); a handful
+# are one-off special situations KIT itself flags separately
+# (Vollbremsung, Glatteis, Beschleunigung, Messfehler) — worth keeping
+# as a column now so step 2 (feature engineering) can filter on it
+# without re-parsing filenames.
+CONDITION_RE = re.compile(r"_([A-Za-z]+)$")
 
 
 def _read_text_fixing_mojibake(path: Path) -> str:
@@ -91,7 +97,37 @@ def load_trip(path: Path) -> pd.DataFrame:
     df = df.drop(columns=["time_str"])
 
     df["source_file"] = path.name
+
+    stem = path.stem  # filename without ".csv"
+    condition_match = CONDITION_RE.search(stem)
+    df["condition"] = condition_match.group(1) if condition_match else "Unknown"
+
     return df
+
+
+def load_all_trips(dataset_dir: Path) -> pd.DataFrame:
+    """
+    Load every trip CSV in dataset_dir and combine into one DataFrame.
+
+    Each trip gets a stable trip_id (0, 1, 2, ...) assigned by sorted
+    filename order — sorted so re-running this produces the same IDs
+    every time, rather than depending on filesystem listing order
+    (which isn't guaranteed stable across OSes/runs). This is what
+    step 3 (train/validation split) will split on, so a trip's rows
+    always stay together on one side of the split rather than leaking
+    a few rows of the same trip into both.
+    """
+    files = sorted(dataset_dir.glob("*.csv"))
+    if not files:
+        raise FileNotFoundError(f"No CSV files found in {dataset_dir}")
+
+    trip_dfs = []
+    for trip_id, path in enumerate(files):
+        df = load_trip(path)
+        df["trip_id"] = trip_id
+        trip_dfs.append(df)
+
+    return pd.concat(trip_dfs, ignore_index=True)
 
 
 if __name__ == "__main__":
@@ -101,17 +137,27 @@ if __name__ == "__main__":
         "10.35097-1130/data/dataset/OBD-II-Dataset"
     ).expanduser()
 
-    sample_file = sorted(DATASET_DIR.glob("*.csv"))[0]
-    print(f"Loading: {sample_file.name}\n")
+    all_trips = load_all_trips(DATASET_DIR)
 
-    df = load_trip(sample_file)
+    print("Combined shape:", all_trips.shape)
+    print("Number of trips:", all_trips["trip_id"].nunique())
 
-    print("Shape:", df.shape)
-    print("\nColumns:", list(df.columns))
-    print("\nFirst 5 rows:")
-    print(df.head())
-    print("\nTimestamp range:", df["timestamp"].min(), "->", df["timestamp"].max())
-    print("\nNaN counts:")
-    print(df.isna().sum())
-    print("\nNumeric summary:")
-    print(df.describe())
+    print("\nRows per trip (sanity check vs. original inspection: 6,829-86,654):")
+    print(all_trips.groupby("trip_id").size().describe())
+
+    print("\nCondition label counts (sanity check vs. original inspection):")
+    print(all_trips.groupby("trip_id")["condition"].first().value_counts())
+
+    print("\nNaN counts across the whole combined set:")
+    print(all_trips.isna().sum())
+
+    print("\nNumeric summary (whole combined set):")
+    print(all_trips.describe())
+
+    # Save the cleaned, combined dataset so step 2 (feature engineering)
+    # starts from this instead of re-running all 81 files through the
+    # loader every time.
+    out_path = Path("analytics/dataset/processed/kit_combined.parquet")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    all_trips.to_parquet(out_path, index=False)
+    print(f"\nSaved combined dataset to: {out_path}")
