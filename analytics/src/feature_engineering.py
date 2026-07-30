@@ -19,10 +19,24 @@ import pandas as pd
 
 # Features that get the rolling-deviation treatment, per the fragility
 # table we worked through — coolant/rpm vary a lot by vehicle
-# (thermostat setpoint, idle speed, gearing), throttle/speed are
-# already comparable physical/percentage units across vehicles.
+# (thermostat setpoint, idle speed, gearing), speed is already a
+# comparable physical unit across vehicles.
+#
+# throttle_pct deliberately excluded: investigation showed KIT's
+# Absolute Throttle Position reading is pinned at one value (83.5%)
+# for 86% of all rows dataset-wide, with ~zero correlation to RPM/speed
+# — essentially dead signal, a known drive-by-wire quirk (physical
+# throttle-plate angle vs. driver pedal input). pedal_d_pct is the
+# genuinely alive signal in KIT, but our own OBD2Lib firmware doesn't
+# collect pedal position yet (only throttle_pct, via CORE_PIDS) — so
+# training on pedal_d_pct now would produce a model we could never
+# actually score our own vehicle's data against. Revisit once pedal
+# position is added to OBD2Lib (flagged alongside the fuel-level
+# addition, architecture.md §3.12) — will need this script re-run
+# against the updated feature set, cheap to do, not done as part of
+# this decision.
 DEVIATION_FEATURES = ["coolant_temp_c", "rpm"]
-RAW_FEATURES = ["throttle_pct", "speed_kmh"]
+RAW_FEATURES = ["speed_kmh"]
 
 ROLLING_WINDOW = "60s"
 
