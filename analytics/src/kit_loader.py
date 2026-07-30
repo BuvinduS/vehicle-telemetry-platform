@@ -40,6 +40,19 @@ FILENAME_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_")
 # without re-parsing filenames.
 CONDITION_RE = re.compile(r"_([A-Za-z]+)$")
 
+# KIT's labels are German. Translated here so nothing downstream has
+# to carry German terms — source_file still preserves the original
+# filename if anyone needs to trace a row back to KIT's own naming.
+CONDITION_TRANSLATION = {
+    "Normal": "normal",
+    "Frei": "free_flow",       # free-flowing traffic
+    "Stau": "traffic_jam",
+    "Vollbremsung": "hard_braking",
+    "Glatteis": "black_ice",
+    "Beschleunigung": "acceleration_test",
+    "Messfehler": "measurement_error",
+}
+
 
 def _read_text_fixing_mojibake(path: Path) -> str:
     """
@@ -100,7 +113,8 @@ def load_trip(path: Path) -> pd.DataFrame:
 
     stem = path.stem  # filename without ".csv"
     condition_match = CONDITION_RE.search(stem)
-    df["condition"] = condition_match.group(1) if condition_match else "Unknown"
+    raw_condition = condition_match.group(1) if condition_match else "unknown"
+    df["condition"] = CONDITION_TRANSLATION.get(raw_condition, raw_condition.lower())
 
     return df
 
@@ -131,11 +145,21 @@ def load_all_trips(dataset_dir: Path) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    # Point this at wherever you unzipped the dataset.
-    DATASET_DIR = Path(
-        "~/vehicle-telemetry-platform/analytics/dataset/raw/kit-obd2/"
-        "10.35097-1130/data/dataset/OBD-II-Dataset"
-    ).expanduser()
+    # Anchor to this script's own location, not the current working
+    # directory. The bug this fixes: a relative path resolves against
+    # wherever the terminal's cwd happens to be when you run the
+    # script, which silently produces a wrong nested path (e.g.
+    # analytics/analytics/...) if you run it from a different folder
+    # than whoever wrote the script assumed. __file__ always points at
+    # this script's real location on disk regardless of cwd, so paths
+    # built from it are correct no matter where you run it from.
+    SCRIPT_DIR = Path(__file__).resolve().parent      # .../analytics/src
+    ANALYTICS_DIR = SCRIPT_DIR.parent                  # .../analytics
+
+    DATASET_DIR = (
+        ANALYTICS_DIR
+        / "dataset/raw/kit-obd2/10.35097-1130/data/dataset/OBD-II-Dataset"
+    )
 
     all_trips = load_all_trips(DATASET_DIR)
 
@@ -157,7 +181,7 @@ if __name__ == "__main__":
     # Save the cleaned, combined dataset so step 2 (feature engineering)
     # starts from this instead of re-running all 81 files through the
     # loader every time.
-    out_path = Path("analytics/dataset/processed/kit_combined.parquet")
+    out_path = ANALYTICS_DIR / "dataset/processed/kit_combined.parquet"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     all_trips.to_parquet(out_path, index=False)
     print(f"\nSaved combined dataset to: {out_path}")
