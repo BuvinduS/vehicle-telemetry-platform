@@ -29,6 +29,16 @@ RANDOM_SEED = 42
 # rpm_dev max ~2900) — these should read as unambiguous faults, not
 # borderline cases, since the point right now is "can the model
 # detect an obvious fault at all," not fine-grained sensitivity.
+#
+# rpm_decorrelation's offset was originally 1200 — a magnitude sweep
+# (rpm_magnitude_sweep.py) showed this badly underestimated how large
+# an offset needs to be relative to RPM's own naturally wide variance
+# (std ~373 in ordinary driving): detection was only 17.5% at 1200,
+# climbing to 95.3% at 2000, and fully saturating (100%, stable
+# mean_delta) from 3000 onward. Updated to 3000 accordingly — the
+# earlier weak result was a test-design issue, not a real model
+# limitation. Lesson: fault magnitudes must be sized relative to each
+# feature's own observed spread, not picked by "sounds big enough."
 FAULTS = {
     "coolant_spike": {
         "column": "coolant_temp_c_dev",
@@ -36,7 +46,7 @@ FAULTS = {
     },
     "rpm_decorrelation": {
         "column": "rpm_dev",
-        "offset": 1200.0,  # simulates e.g. a slipping clutch: RPM rises, speed doesn't
+        "offset": 3000.0,  # simulates e.g. a slipping clutch: RPM rises, speed doesn't
     },
 }
 
