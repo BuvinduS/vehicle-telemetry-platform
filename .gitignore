@@ -22,3 +22,9 @@ __pycache__/
 
 # project docs
 project_docs/
+
+# dataset
+analytics/dataset/raw/*
+!analytics/dataset/raw/README.md
+analytics/dataset/processed/
+analytics/models/*.pkl
