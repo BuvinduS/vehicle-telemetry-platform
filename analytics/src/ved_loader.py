@@ -15,6 +15,12 @@ different from KIT's:
   between) — confirmed via full-dataset inspection, not assumed. Vehicles
   that don't report it are excluded from that engine type's pool rather
   than imputed across, same principle as OBD2Lib's checkCorePIDSupport().
+- Absolute Load[%] also contains physically-impossible values (>100%,
+  up to ~22,463) in a small fraction of rows across both ICE and HEV —
+  corrupted logger readings, not real values (this PID is bounded to
+  [0,100] by its own SAE J1979 definition). Nulled out rather than
+  clipped, so a fabricated plateau at 100 never enters the rolling-median
+  feature computation downstream.
 - Native sampling is irregular and already close to ~1Hz (median trip
   effective rate ~1.1 rows/sec) — NOT KIT's ~10Hz forward-filled logging.
   This script does not resample; that's feature_engineering.py's job,
@@ -63,6 +69,19 @@ RENAME = {
 # (0.3) since the real population is bimodal, not a judgment call being
 # smuggled in as a precise-looking number.
 LOAD_SUPPORT_NULL_THRESHOLD = 0.3
+
+# Absolute Load[%] is physically bounded to [0, 100] by its own PID
+# definition (A*100/255, per SAE J1979) — confirmed via direct inspection
+# that VED's raw data nonetheless contains values up to ~22,463 (0.24% of
+# ICE rows across 1,059 of 15,139 trips; 0.06% of HEV rows across 370 of
+# 9,329 trips; worst single-vehicle concentration 10.8%, well under the
+# exclusion threshold above so this doesn't change which vehicles are
+# considered PID-supported). These are corrupted logger readings, not
+# real values — nulled out rather than clipped, since clipping to 100
+# would fabricate a plateau that was never actually measured, whereas
+# nulling just marks that instant as unknown (same treatment as any other
+# missing reading downstream).
+LOAD_VALID_RANGE = (0.0, 100.0)
 
 # Reference date for DayNum -> wall-clock conversion, per VED's README:
 # "DayNum 1 = Nov 1st, 2017, 00:00:00". DayNum is 1-indexed and fractional
@@ -157,6 +176,12 @@ def load_and_clean(dynamic_dir: Path, static_dir: Path, cache_dir: Path) -> None
     for f in files:
         df = pd.read_csv(f, usecols=KEEP_COLS)
         df = df[~df["VehId"].isin(excluded_vehicles)]
+
+        lo, hi = LOAD_VALID_RANGE
+        out_of_range = ~df["Absolute Load[%]"].between(lo, hi) & df["Absolute Load[%]"].notna()
+        if out_of_range.any():
+            df.loc[out_of_range, "Absolute Load[%]"] = pd.NA
+
         df["engine_type"] = df["VehId"].map(veh_engine_type)
         df = df[df["engine_type"].isin(["ICE", "HEV"])]
         if df.empty:
