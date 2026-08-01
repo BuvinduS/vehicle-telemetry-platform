@@ -375,7 +375,19 @@ even the right thing to build.
    joined against `sessions` via the existing time-range pattern, on a
    dedicated dashboard. Explicitly deferred to a separate follow-up
    chat; not started as part of this work.
-
+5. **Hybrid/ICE model rebuild on VED**: VED (Vehicle Energy Dataset,
+   gsoh/VED, Apache 2.0, DOI 10.1109/TITS.2020.3035596) confirmed as a
+   viable multi-vehicle source — 264 gasoline, 92 HEV, 27 PHEV/EV
+   vehicles, same collection methodology/era for all. Includes
+   Absolute Load[%] (resolves the engine_load_pct gap, §2.2/§8) but
+   has NO coolant temperature column at all — trades away the
+   strongest-performing feature from §5's fault injection results.
+   Open decision for that chat: replace KIT entirely with VED for both
+   ICE and hybrid variants (consistent features, apples-to-apples, no
+   coolant), vs. keep KIT for ICE + VED for hybrid (preserves coolant
+   for one variant, reintroduces asymmetry between the two models).
+   Static per-vehicle metadata (VED_Static_Data_*.xlsx) supports
+   filtering by powertrain type either way.
 ---
 
 ## Appendix: Script Inventory
