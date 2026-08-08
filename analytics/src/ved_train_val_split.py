@@ -81,13 +81,30 @@ def balanced_vehicle_split(veh_rows: pd.Series, ratios: dict[str, float], seed: 
     return assignment
 
 
-def split_dataset(input_path: Path, output_dir: Path) -> None:
+def split_dataset(input_path: Path, output_dir: Path, reuse_manifest: Path | None = None) -> None:
     print(f"Loading {input_path}...", file=sys.stderr)
     df = pd.read_parquet(input_path)
     print(f"  {len(df):,} rows, {df.VehId.nunique()} vehicles", file=sys.stderr)
 
     veh_rows = df.groupby("VehId").size()
-    assignment = balanced_vehicle_split(veh_rows, SPLIT_RATIOS, RANDOM_SEED)
+
+    if reuse_manifest is not None:
+        print(f"Reusing existing vehicle assignments from {reuse_manifest} "
+              f"(NOT recomputing a fresh split) — for apples-to-apples comparison "
+              f"across pipeline variants (e.g. different window lengths) that "
+              f"should hold the train/val/test vehicle split constant.", file=sys.stderr)
+        prior = pd.read_csv(reuse_manifest)
+        assignment = dict(zip(prior["VehId"], prior["split"]))
+        missing = set(veh_rows.index) - set(assignment)
+        if missing:
+            raise ValueError(
+                f"{len(missing)} vehicles in {input_path} have no assignment in "
+                f"{reuse_manifest} — the two datasets don't share the same vehicle pool "
+                f"(e.g. different --window-seconds dropped different short trips down to "
+                f"zero rows for a vehicle entirely). Vehicles: {sorted(missing)[:10]}..."
+            )
+    else:
+        assignment = balanced_vehicle_split(veh_rows, SPLIT_RATIOS, RANDOM_SEED)
 
     df["split"] = df["VehId"].map(assignment)
 
@@ -128,9 +145,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Path to ved_ice_featured.parquet or ved_hev_featured.parquet")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory to write train/val/test parquet files + manifest")
+    parser.add_argument("--reuse-manifest", type=Path, default=None, help="Optional path to an existing *_split_manifest.csv — reuse its VehId->split assignments instead of computing a fresh balanced split (for comparing pipeline variants on identical vehicle pools)")
     args = parser.parse_args()
 
-    split_dataset(args.input, args.output_dir)
+    split_dataset(args.input, args.output_dir, reuse_manifest=args.reuse_manifest)
 
 
 if __name__ == "__main__":

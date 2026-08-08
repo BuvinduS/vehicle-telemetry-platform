@@ -15,9 +15,9 @@ sampling characteristics are genuinely different from KIT's:
   from 100ms to multi-second gaps). A row-based rolling window here
   would correspond to a different, unpredictable time span from one
   trip (or even one stretch of a trip) to the next. This script uses
-  pandas' TIME-based rolling window (`.rolling("60s")` on a
+  pandas' TIME-based rolling window (`.rolling(f"{window}s")` on a
   DatetimeIndex) instead, which correctly handles irregular spacing —
-  the window is always "the last 60 seconds of wall-clock time,"
+  the window is always "the last N seconds of wall-clock time,"
   regardless of how many rows happen to fall inside it.
 
 Features produced (mirrors the KIT model's 3-feature shape, with
@@ -25,12 +25,19 @@ Features produced (mirrors the KIT model's 3-feature shape, with
 VED has no coolant column at all — see architecture.md / model_details.md
 for the full trade-off discussion):
 
-- `rpm_dev`            — rpm minus its own trailing 60s rolling median
-- `engine_load_pct_dev`— engine_load_pct minus its own trailing 60s
-                          rolling median
+- `rpm_dev`            — rpm minus its own trailing rolling median
+- `engine_load_pct_dev`— engine_load_pct minus its own trailing rolling
+                          median
 - `speed_kmh`           — raw value, unchanged (same as the KIT model —
                           km/h is directly comparable, low cross-vehicle
                           fragility, doesn't need a deviation transform)
+
+Window duration is a CLI parameter (--window-seconds, default 60), not
+hardcoded — added specifically to support comparing window lengths
+against real_obd_001's short (median ~7.5s, max ~55.5s in the tested
+session) engine-on stretches, per the chat discussion. Output filenames
+are suffixed with the window length (e.g. `..._w30.parquet`) so
+different window variants coexist rather than overwrite each other.
 
 Per the "pandas 2.2+ groupby().apply() silently drops the grouping
 column" lesson from the KIT chat: this script loops over `groupby()`'s
@@ -46,47 +53,42 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 
-ROLLING_WINDOW = "60s"
-# Minimum wall-clock span of real history required before a row's
-# deviation is considered valid — matches the window length itself.
-# Rows before this point in a trip are dropped, same "avoid an ambiguous
-# partial-window case entirely" reasoning as the KIT chat's cold-start
-# trim (feature_engineering.py), just re-derived here for a time-based
-# window rather than a row-count-based one.
-MIN_TRIP_SECONDS = 60
 
-
-def compute_trip_features(trip_df: pd.DataFrame) -> pd.DataFrame:
+def compute_trip_features(trip_df: pd.DataFrame, window_seconds: int) -> pd.DataFrame:
     """Compute rolling-deviation features for a single (VehId, Trip) group.
 
     Assumes `trip_df` contains exactly one vehicle/trip's rows. Returns a
     new DataFrame with `rpm_dev` / `engine_load_pct_dev` added and the
-    cold-start window trimmed, or an empty DataFrame if the trip is
-    shorter than MIN_TRIP_SECONDS entirely.
+    cold-start window trimmed (trim length == window_seconds, same
+    "avoid an ambiguous partial-window case entirely" reasoning as the
+    KIT chat's cold-start trim, just re-derived here for a time-based
+    window rather than a row-count-based one), or an empty DataFrame if
+    the trip is shorter than window_seconds entirely.
     """
     trip_df = trip_df.sort_values("time")
 
     span_s = (trip_df["time"].iloc[-1] - trip_df["time"].iloc[0]).total_seconds()
-    if span_s < MIN_TRIP_SECONDS:
+    if span_s < window_seconds:
         return trip_df.iloc[0:0]
 
     indexed = trip_df.set_index("time")
 
-    rolling_rpm_median = indexed["rpm"].rolling(ROLLING_WINDOW).median()
-    rolling_load_median = indexed["engine_load_pct"].rolling(ROLLING_WINDOW).median()
+    window = f"{window_seconds}s"
+    rolling_rpm_median = indexed["rpm"].rolling(window).median()
+    rolling_load_median = indexed["engine_load_pct"].rolling(window).median()
 
     indexed["rpm_dev"] = indexed["rpm"] - rolling_rpm_median
     indexed["engine_load_pct_dev"] = indexed["engine_load_pct"] - rolling_load_median
 
     out = indexed.reset_index()
 
-    cutoff = out["time"].iloc[0] + pd.Timedelta(seconds=MIN_TRIP_SECONDS)
+    cutoff = out["time"].iloc[0] + pd.Timedelta(seconds=window_seconds)
     out = out[out["time"] >= cutoff]
 
     return out
 
 
-def process(df: pd.DataFrame) -> pd.DataFrame:
+def process(df: pd.DataFrame, window_seconds: int) -> pd.DataFrame:
     """Apply compute_trip_features to every (VehId, Trip) group.
 
     Explicit loop over groupby's own (key, sub_df) pairs rather than
@@ -96,17 +98,17 @@ def process(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
     n_groups = df.groupby(["VehId", "Trip"]).ngroups
-    print(f"Processing {n_groups} (VehId, Trip) groups...", file=sys.stderr)
+    print(f"Processing {n_groups} (VehId, Trip) groups (window={window_seconds}s)...", file=sys.stderr)
 
     for i, ((veh_id, trip), sub_df) in enumerate(df.groupby(["VehId", "Trip"])):
-        featured = compute_trip_features(sub_df)
+        featured = compute_trip_features(sub_df, window_seconds)
         if not featured.empty:
             results.append(featured)
         if i % 2000 == 0:
             print(f"  {i}/{n_groups} groups", file=sys.stderr)
 
     if not results:
-        raise ValueError("No trips survived feature engineering — check MIN_TRIP_SECONDS / input data")
+        raise ValueError("No trips survived feature engineering — check --window-seconds / input data")
 
     out = pd.concat(results, ignore_index=True)
     return out[["VehId", "Trip", "time", "speed_kmh", "rpm_dev", "engine_load_pct_dev"]]
@@ -116,18 +118,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Path to ved_ice_clean.parquet or ved_hev_clean.parquet")
     parser.add_argument("--output", type=Path, required=True, help="Path to write the featured parquet")
+    parser.add_argument("--window-seconds", type=int, default=60, help="Trailing rolling-median window length in seconds (also used as the cold-start trim length)")
     args = parser.parse_args()
 
     print(f"Loading {args.input}...", file=sys.stderr)
     df = pd.read_parquet(args.input)
     print(f"  {len(df):,} rows, {df.VehId.nunique()} vehicles, {df.groupby(['VehId','Trip']).ngroups} trips", file=sys.stderr)
 
-    featured = process(df)
+    featured = process(df, args.window_seconds)
 
     n_dropped_trips = df.groupby(["VehId", "Trip"]).ngroups - featured.groupby(["VehId", "Trip"]).ngroups
     print(
         f"Done: {len(featured):,} rows, {featured.groupby(['VehId','Trip']).ngroups} trips retained "
-        f"({n_dropped_trips} trips dropped for being under {MIN_TRIP_SECONDS}s)",
+        f"({n_dropped_trips} trips dropped for being under {args.window_seconds}s)",
         file=sys.stderr,
     )
 

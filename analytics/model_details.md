@@ -388,6 +388,158 @@ even the right thing to build.
    for one variant, reintroduces asymmetry between the two models).
    Static per-vehicle metadata (VED_Static_Data_*.xlsx) supports
    filtering by powertrain type either way.
+
+## 10. VED-based ICE/HEV models — built, evaluated, and superseded by a per-vehicle design
+
+**Status: cross-vehicle VED models complete and sealed-tested; findings
+directly motivated a pivot away from population-trained models toward
+per-vehicle models (§11). VED work is not discarded — repurposed as a
+cold-start prior, see §11.2.**
+
+### 10.1 What was built
+
+Following the decision in §9's future work (test against more diverse
+real data, decide whether VED replaces KIT), a full parallel pipeline
+was built against the Vehicle Energy Dataset (VED — Oh, LeBlanc, Peng
+2020, University of Michigan, Apache 2.0, DOI 10.1109/TITS.2020.3035596),
+producing two model variants: **VED-ICE** and **VED-HEV**, each with its
+own feature set, split, threshold, and sealed test evaluation, methodology
+otherwise identical to the KIT pipeline (Isolation Forest, trip/vehicle-
+level split, explicit FPR/detection tradeoff calibration, synthetic
+fault injection with magnitude sized to each feature's own std, one-time
+sealed test evaluation).
+
+**Data quality findings, confirmed via direct inspection before use**
+(same discipline as KIT's encoding-issue discovery):
+- No encoding issues (unlike KIT — confirmed pure ASCII throughout).
+- `Absolute Load[%]` (used as `engine_load_pct_dev`, replacing KIT's
+  `coolant_temp_c_dev` — VED has no coolant column at all) is bimodal
+  *per vehicle*: a given vehicle reports it almost always or almost
+  never, essentially nothing in between. 85 of 384 vehicles (54 ICE, 4
+  HEV, all 27 PHEV/EV) were excluded from their respective model's
+  training pool for not supporting the PID, rather than imputed across.
+- `Absolute Load[%]` also contained physically-impossible values (up to
+  ~22,463%, against a PID that's bounded [0,100] by its own SAE J1979
+  definition) in 0.24% of ICE rows / 0.06% of HEV rows — corrupted
+  logger readings, nulled out (not clipped, to avoid fabricating a
+  plateau that was never measured) before feature engineering.
+- Native sampling is irregular and close to ~1Hz (unlike KIT's
+  forward-filled ~10Hz) — feature engineering uses a **time-based**
+  rolling window (`.rolling("60s")` on a real timestamp index), not
+  KIT's row-based approach, so it correctly handles irregular spacing.
+
+**Feature set** (both variants): `rpm_dev`, `engine_load_pct_dev` (both:
+trailing rolling-median deviation, strictly causal, per-trip cold-start
+trimmed), raw `speed_kmh`. `engine_load_pct_dev` fills the gap KIT had
+(no `engine_load_pct` at all in that dataset) — the trade-off is no
+coolant feature, VED's one structural gap versus KIT.
+
+**Split**: vehicle-level (not trip-level, unlike KIT), row-count-balanced
+via a greedy largest-first bin-packing assignment — necessary because
+per-vehicle row counts are extremely skewed (187 to 887,056 rows/vehicle)
+and a naive random-by-vehicle-count split could land far from 70/15/15
+by actual row volume purely by chance. Achieved: ICE 150/30/30 vehicles
+(70.0/15.0/15.0% of rows), HEV 63/13/13 vehicles (69.9/15.0/15.1%).
+
+### 10.2 Sealed test results
+
+| | KIT-ICE (§6) | VED-ICE | VED-HEV |
+|---|---|---|---|
+| Test FPR | 2.23% (expected 2.0%) | 2.847% (expected 3.0%) | 3.352% (expected 3.0%) |
+| `coolant_spike`/`load_spike` detection | 100% | 100% | 86.0% |
+| `rpm_decorrelation` detection | 100% | 100% | 100.0% |
+| Held-out test diversity | 12 trips, **1 vehicle** | 2,355 trips, **30 vehicles** | 1,450 trips, **13 vehicles** |
+
+VED-ICE matches KIT-ICE's detection quality on a held-out set that
+actually tests cross-vehicle generalization — KIT structurally could
+never test this, being a single vehicle.
+
+VED-HEV's `load_spike` fault showed a genuine, model-specific
+detectability ceiling on val (~80.7% at a 2% threshold, never fully
+saturating even at 10%) traced to a real property of Isolation Forest
+scoring: once a single-feature outlier is trivially separable, further
+increasing its magnitude does not lower its score further (confirmed by
+direct probe — identical score whether the offset is 1,000 or
+1,000,000,000). A looser 3% threshold was accepted deliberately (val
+88.0%, test 86.0%) rather than chasing full saturation at the cost of
+more false alarms — this ceiling did not reproduce nearly as severely
+for VED-ICE (98.3%+ at the same threshold), so it's a property of this
+specific fitted model/vehicle population, not the fault-injection
+methodology itself.
+
+### 10.3 The `real_obd_001` finding that changed the plan
+
+Scoring this project's own hybrid session (`real_obd_001`) against
+VED-HEV: **13.8% anomaly rate** (vs. ~3% expected) — an improvement over
+the original KIT-model result (16.7%, §7) but still far from the
+calibrated rate.
+
+**Root-cause investigation, same discipline as §7's original
+investigation — hypothesis tested and rejected, not assumed:**
+
+The original KIT-model hypothesis (short engine-on cycles are
+underrepresented in training, so the 60s rolling window never
+stabilizes) was directly retested against VED-HEV and **rejected**:
+VED's own 89 HEV vehicles have plenty of short engine-on stretches too
+(median 10.0s, 49.6% under 10s, only 7.3% ever reach 60s, across ~1.99M
+rows) — `real_obd_001`'s pattern (median ~7.5s, 0% reaching 60s) is
+well within VED's own typical range, not a novel shape.
+
+The actual driver, confirmed by direct magnitude comparison against
+VED-HEV's own short-stretch reference distribution:
+
+| | VED-HEV reference (median \|dev\|) | `real_obd_001` (median \|dev\|) |
+|---|---|---|
+| `rpm_dev` | ~480 | ~1,238 (elevated ~2.6x, but within VED's own tail range — only 3.8% of rows exceed VED's own 95th percentile) |
+| `engine_load_pct_dev` | ~14.5 | **~70.6** (exceeds VED's own 99th percentile of ~65.5 — this is `real_obd_001`'s *typical* row, not a tail case) |
+
+`engine_load_pct` is behaving very differently in `real_obd_001` than in
+VED's 89-vehicle population, specifically at the moment the engine
+kicks in — consistent with a hybrid control strategy that fires the
+engine only under high-demand conditions (confirmed anecdotally: RPM
+jumps directly from 0 to ~1,470 in under a second in at least one
+observed instance — consistent with an electrically-spun-up hybrid
+architecture, e.g. Toyota HSD-style, rather than a traditional
+starter-crank ramp). A scaling/calibration bug was considered and ruled
+out — this data was captured via the feasibility project's `python-obd`
+pipeline, not `OBD2Lib`, and there's no reason to suspect a units issue
+there.
+
+**Window-duration follow-up**: a 30-second-window HEV variant was built
+and fully evaluated (same train/val/test vehicles as the 60s model, via
+`--reuse-manifest`, for a clean apples-to-apples comparison). On VED's
+own data the shift is modest (median `engine_load_pct_dev` |dev| 14.5 →
+11.8, ~19% — nowhere near closing the ~5x gap to `real_obd_001`), but
+the 30s model's sealed test result was independently better regardless:
+**99.7% `load_spike` detection vs. 86.0% for the 60s model**, at a
+comparable FPR (3.698% vs 3.352%) — a genuine improvement on its own
+merits, not contingent on resolving the `real_obd_001` gap.
+
+**Conclusion**: a model trained on 89 real hybrid vehicles still
+couldn't match `real_obd_001`'s *typical* (median, not just tail)
+behavior. This is evidence that no population-scale training set —
+however large or diverse — is likely to fully close this kind of gap
+for every vehicle, because the gap reflects genuine vehicle/manufacturer-
+specific control-strategy differences, not a data-coverage problem. This
+finding directly motivated a pivot to per-vehicle models — design and
+rationale recorded in `architecture.md` §3.15 (this project's convention
+is architecture decisions live there, not duplicated here).
+
+### 10.4 What's preserved from this work
+
+- Full VED pipeline (`ved_loader.py`, `ved_feature_engineering.py` —
+  now parameterized by window length, `ved_train_val_split.py` — now
+  supports `--reuse-manifest`, `ved_train_baseline_model.py`,
+  `ved_synthetic_fault_injection.py`, `ved_threshold_calibration.py`,
+  `ved_final_evaluation.py`) is retained and directly reusable — see
+  `architecture.md` §3.15.2 for how it's repurposed as a cold-start
+  prior rather than discarded.
+- All data-quality findings (§10.1) apply regardless of what happens to
+  the cross-vehicle model itself — any future VED use (cold-start prior,
+  or a from-scratch per-vehicle bootstrap comparison) inherits them.
+- The Isolation Forest score-ceiling mechanism (§10.2) is a durable
+  finding about the algorithm itself, applicable to any future
+  single-feature synthetic fault design, cross-vehicle or per-vehicle.
 ---
 
 ## Appendix: Script Inventory
