@@ -28,3 +28,6 @@ analytics/dataset/raw/*
 !analytics/dataset/raw/README.md
 analytics/dataset/processed/
 analytics/models/*.pkl
+
+# plot images
+output/
