@@ -79,9 +79,29 @@ MODEL_RANDOM_STATE = 42
 FAULT_SEED = 42
 
 STD_MULTIPLES = [0.5, 1.0, 2.0, 3.0, 5.0, 8.0]
-N_FAULT_WINDOWS = 20   # small default — per-vehicle test sets are much
-                        # smaller than the pooled val sets the original
-                        # fault-injection script was sized for (default 300)
+
+# --- Per-vehicle fault-window sampling ---
+# vsfi.sample_fault_windows() (reused for the original pooled cross-vehicle
+# val sets) draws AT MOST ONE window per trip — fine when val has hundreds
+# of trips, but a per-vehicle test set here can have as few as 2-4 trips,
+# which means as few as 2-4 independent detection "trials" total. A
+# detection rate computed from that few trials is dominated by sampling
+# noise, not model quality — confirmed directly: several vehicles in the
+# first real run showed detection apparently "saturating" at essentially
+# zero training days, which traced back to exactly the vehicles with the
+# fewest held-out trips, not to genuinely fast learning.
+#
+# Fix, scoped locally to this script rather than modifying
+# ved_synthetic_fault_injection.py (which is correctly tuned for its own,
+# different use case): draw several non-overlapping windows per trip
+# instead of one, and refuse to report a detection rate at all below a
+# minimum total window count.
+MAX_WINDOWS_PER_TRIP = 5     # non-overlapping — caps one long trip from
+                              # dominating a vehicle's whole sample
+MIN_TOTAL_WINDOWS = 15       # below this, the vehicle is skipped entirely
+                              # (not just flagged) — same "don't produce a
+                              # number that looks real but isn't" principle
+                              # as the vehicle-level skips already in place
 
 # ---------------------------------------------------------------------
 
@@ -154,6 +174,94 @@ def subset_by_trip_ids(df: pd.DataFrame, trip_ids: set) -> pd.DataFrame:
     return df[mask].copy()
 
 
+def sample_fault_windows_dense(df: pd.DataFrame, max_per_trip: int, seed: int) -> list:
+    """Draw up to `max_per_trip` non-overlapping vsfi.WINDOW_SECONDS-length
+    windows from each (VehId, Trip) group — a locally-scoped replacement for
+    vsfi.sample_fault_windows's one-window-per-trip behavior, needed because
+    a single vehicle's held-out test set has far fewer trips than the pooled
+    cross-vehicle val sets that function was designed for. See CONFIG block
+    above for the full reasoning.
+
+    Windows are carved as sequential, non-overlapping chunks starting from
+    each trip's own first surviving row, then up to `max_per_trip` of the
+    resulting chunks are kept (all of them if fewer exist), chosen via a
+    seeded shuffle so which chunks are kept is reproducible. Same per-window
+    validity checks as vsfi.sample_fault_windows (no nulls in FEATURE_COLS,
+    at least 3 rows).
+    """
+    rng = np.random.default_rng(seed)
+    windows = []
+
+    for (veh, trip), sub in df.groupby(["VehId", "Trip"]):
+        sub = sub.sort_values("time")
+        start = sub["time"].iloc[0]
+        end = sub["time"].iloc[-1]
+        span_s = (end - start).total_seconds()
+
+        n_chunks = int(span_s // vsfi.WINDOW_SECONDS)
+        if n_chunks < 1:
+            continue
+
+        chunk_indices = list(range(n_chunks))
+        rng.shuffle(chunk_indices)
+
+        for ci in chunk_indices[:max_per_trip]:
+            w_start = start + pd.Timedelta(seconds=ci * vsfi.WINDOW_SECONDS)
+            w_end = w_start + pd.Timedelta(seconds=vsfi.WINDOW_SECONDS)
+            window = sub[(sub["time"] >= w_start) & (sub["time"] < w_end)]
+            if window[vsfi.FEATURE_COLS].isnull().any().any():
+                continue
+            if len(window) < 3:
+                continue
+            windows.append(window)
+
+    return windows
+
+
+def run_multi_window_sweep(
+    model,
+    val_df_for_thresholds: pd.DataFrame,
+    windows: list,
+    fault_type: str,
+    std_multiples: list,
+    feature_std: float,
+) -> pd.DataFrame:
+    """Same logic as vsfi.run_sweep, but takes a pre-sampled window list
+    directly instead of calling vsfi.sample_fault_windows internally — lets
+    this script supply the denser per-vehicle sample from
+    sample_fault_windows_dense() above while reusing everything else
+    (reference-threshold computation, fault injection, scoring) unmodified
+    from ved_synthetic_fault_injection.py."""
+    val_scores_all = model.decision_function(
+        val_df_for_thresholds[vsfi.FEATURE_COLS].dropna().to_numpy()
+    )
+    ref_thresholds = {
+        fpr: float(np.percentile(val_scores_all, fpr * 100))
+        for fpr in vsfi.REFERENCE_FPR_TARGETS
+    }
+
+    rows = []
+    for mult in std_multiples:
+        magnitude = mult * feature_std
+        detections = {fpr: 0 for fpr in vsfi.REFERENCE_FPR_TARGETS}
+        total = 0
+        for window in windows:
+            faulted = vsfi.inject_fault(window, fault_type, magnitude)
+            scores = model.decision_function(faulted[vsfi.FEATURE_COLS].to_numpy())
+            for fpr, thresh in ref_thresholds.items():
+                detections[fpr] += int((scores < thresh).any())
+            total += 1
+
+        row = {"std_multiple": mult, "magnitude": magnitude, "n_windows": total}
+        for fpr in vsfi.REFERENCE_FPR_TARGETS:
+            row[f"detect_rate_at_{int(fpr*100)}pct_fpr"] = (
+                detections[fpr] / total if total else float("nan")
+            )
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def run_vehicle(
     cache_dir: Path,
     pool: str,
@@ -189,21 +297,21 @@ def run_vehicle(
         return None
     print(f"  test set: {len(test_features)} rows after feature engineering", file=sys.stderr)
 
-    # Probe: can the fixed test set support even one fault-injection window?
-    # This is a property of the test set alone (independent of training
-    # volume), so check it once here rather than discovering "0 windows"
-    # repeatedly across every step/fault-type/magnitude combination and
-    # filling the output with meaningless NaN rows.
-    probe_windows = vsfi.sample_fault_windows(test_features, n_trips=1, seed=FAULT_SEED)
-    if not probe_windows:
+    # Draw the dense multi-window sample from the fixed test set ONCE —
+    # independent of training volume, reused unchanged across every step
+    # below, same fairness reasoning as test_features itself.
+    test_windows = sample_fault_windows_dense(test_features, MAX_WINDOWS_PER_TRIP, FAULT_SEED)
+    if len(test_windows) < MIN_TOTAL_WINDOWS:
         print(
-            f"  SKIPPING vehicle: held-out test trips are too short to contain "
-            f"a single {vsfi.WINDOW_SECONDS}s fault-injection window after "
-            f"feature engineering — this vehicle's test set can't support the "
-            f"experiment regardless of training volume.",
+            f"  SKIPPING vehicle: only {len(test_windows)} fault-injection windows "
+            f"available from the held-out test trips (need >= {MIN_TOTAL_WINDOWS}) — "
+            f"too few independent trials to report a meaningful detection rate, "
+            f"regardless of training volume.",
             file=sys.stderr,
         )
         return None
+    print(f"  {len(test_windows)} fault-injection windows sampled from test set "
+          f"(fixed, reused across all training-volume steps)", file=sys.stderr)
 
     all_steps = list(day_cutoffs) + [None]  # None == "all remaining training trips"
     results = []
@@ -244,9 +352,8 @@ def run_vehicle(
                 print(f"    [{fault_type}] skipped — degenerate std ({feature_std})", file=sys.stderr)
                 continue
 
-            sweep = vsfi.run_sweep(
-                model, test_features, fault_type, STD_MULTIPLES, feature_std,
-                n_trips=N_FAULT_WINDOWS, seed=FAULT_SEED,
+            sweep = run_multi_window_sweep(
+                model, test_features, test_windows, fault_type, STD_MULTIPLES, feature_std,
             )
             sweep["vehicle_id"] = vehicle_id
             sweep["powertrain"] = pool
@@ -265,20 +372,24 @@ def run_vehicle(
 
 
 def main():
-    global N_FAULT_WINDOWS
+    global MAX_WINDOWS_PER_TRIP, MIN_TOTAL_WINDOWS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-dir", type=Path, required=True,
-                         help="Directory containing ved_ice_clean.parquet / ved_hev_clean.parquet") # ../datset/processd/
+                         help="Directory containing ved_ice_clean.parquet / ved_hev_clean.parquet")
     parser.add_argument("--selection-csv", type=Path, required=True,
-                         help="Output of select_sweep_vehicles.py")                                 # dataset/processed/split/sweep_vehicle_selection.csv
+                         help="Output of select_sweep_vehicles.py")
     parser.add_argument("--day-cutoffs", type=int, nargs="+", default=DEFAULT_DAY_CUTOFFS)
     parser.add_argument("--window-seconds", type=int, default=DEVIATION_WINDOW_SECONDS,
                          help="Rolling-deviation window for rpm_dev/engine_load_pct_dev")
-    parser.add_argument("--n-fault-windows", type=int, default=N_FAULT_WINDOWS)
-    parser.add_argument("--output-csv", type=Path, required=True)                                   # dataset/processed/split/volume_sweep_results.csv
+    parser.add_argument("--max-windows-per-trip", type=int, default=MAX_WINDOWS_PER_TRIP,
+                         help="Max non-overlapping fault-injection windows drawn per test trip")
+    parser.add_argument("--min-total-windows", type=int, default=MIN_TOTAL_WINDOWS,
+                         help="Minimum total fault windows required to report a vehicle's results")
+    parser.add_argument("--output-csv", type=Path, required=True)
 
     args = parser.parse_args()
-    N_FAULT_WINDOWS = args.n_fault_windows
+    MAX_WINDOWS_PER_TRIP = args.max_windows_per_trip
+    MIN_TOTAL_WINDOWS = args.min_total_windows
 
     selection = pd.read_csv(args.selection_csv)
     required = {"vehicle_id", "powertrain"}
