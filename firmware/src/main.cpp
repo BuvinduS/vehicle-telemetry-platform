@@ -3,6 +3,9 @@
 #include "imu_sensor.h"
 #include "mqtt_publisher.h"
 #include <WiFi.h>
+#include <SPI.h>
+#include <transports/MCP2515Transport.h>
+#include <OBD2.h>
 
 // ---------------------------------------------------------------------------
 // Configuration — update these for your environment
@@ -16,6 +19,13 @@ static const uint16_t BROKER_PORT = 1883;
 static const int SDA_PIN = 21;
 static const int SCL_PIN = 20;
 
+// --- New: MCP2515 / CAN pins (confirmed, OBD2Lib-reference.md §9) ---
+static const int CAN_SCK  = 12;
+static const int CAN_MOSI = 4;
+static const int CAN_MISO = 5;
+static const int CAN_CS   = 13;
+static const int CAN_INT  = 15;
+
 // Publish interval in milliseconds (~10Hz to match OBD publisher)
 static const unsigned long PUBLISH_INTERVAL_MS = 100;
 
@@ -25,7 +35,9 @@ static const unsigned long PUBLISH_INTERVAL_MS = 100;
 static IMUSensor     imu;
 static MQTTPublisher mqtt;
 static unsigned long lastPublish = 0;
-
+static SPIClass canSPI(FSPI);
+static obd::MCP2515Transport canTransport(CAN_CS, CAN_INT, canSPI, CAN_500KBPS, MCP_8MHZ);
+static obd::OBD2 obd2(canTransport);
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -39,6 +51,15 @@ void setup() {
         Serial.println(F("[TELEMETRY] IMU init failed — halting."));
         while (true) delay(1000);
     }
+
+    // --- New: Init CAN/OBD2 ---
+    canSPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI, CAN_CS);
+
+    bool transportOk = canTransport.begin();
+    Serial.println(transportOk ? F("[OBD2] transport.begin() OK") : F("[OBD2] transport.begin() FAILED"));
+
+    bool obdOk = obd2.begin();
+    Serial.println(obdOk ? F("[OBD2] obd2.begin() OK") : F("[OBD2] obd2.begin() FAILED"));
 
     // Init MQTT
     mqtt.configure(WIFI_SSID, WIFI_PASSWORD, BROKER_IP, BROKER_PORT);
