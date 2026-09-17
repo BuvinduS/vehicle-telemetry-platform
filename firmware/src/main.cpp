@@ -38,6 +38,7 @@ static unsigned long lastPublish = 0;
 static SPIClass canSPI(FSPI);
 static obd::MCP2515Transport canTransport(CAN_CS, CAN_INT, canSPI, CAN_500KBPS, MCP_8MHZ);
 static obd::OBD2 obd2(canTransport);
+static ObdPoller obdPoller(obd2);
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -95,15 +96,33 @@ void setup() {
 // ---------------------------------------------------------------------------
 void loop() {
     unsigned long now = millis();
+
+    obdPoller.update();
+
     if (now - lastPublish >= PUBLISH_INTERVAL_MS) {
         lastPublish = now;
 
         AccelData accel = imu.getRawAccel();
         if (accel.valid) {
-            bool ok = mqtt.publish(accel);
-            if (!ok) {
-                Serial.println(F("[TELEMETRY] Publish failed."));
+            if (!mqtt.publish(accel)) {
+                Serial.println(F("[TELEMETRY] IMU publish failed."));
             }
+        }
+
+        ObdData obdData = obdPoller.getLatest();
+
+        // --- Debug print, field-test only ---
+        Serial.printf(
+            "[OBD] rpm=%.1f(%d) speed=%.1f(%d) throttle=%.1f(%d) coolant=%.1f(%d) load=%.1f(%d)\n",
+            obdData.rpm,            obdData.rpm_valid,
+            obdData.speed_kmh,      obdData.speed_valid,
+            obdData.throttle_pct,   obdData.throttle_valid,
+            obdData.coolant_temp_c, obdData.coolant_valid,
+            obdData.engine_load_pct, obdData.engine_load_valid
+        );
+
+        if (!mqtt.publish(obdData)) {
+            Serial.println(F("[TELEMETRY] OBD publish failed."));
         }
     }
     mqtt.loop();

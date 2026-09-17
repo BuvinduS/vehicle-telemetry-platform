@@ -56,9 +56,32 @@ bool MQTTPublisher::publish(const AccelData& accel) {
         return s_mqttClient.publish(_topic, payload);
     }
 
+bool MQTTPublisher::publish(const ObdData& obd){
+    if (!s_mqttClient.connected()) return false;
+
+    char rpmBuf[16], speedBuf[16], throttleBuf[16], coolantBuf[16], loadBuf[16];
+
+    snprintf(rpmBuf, sizeof(rpmBuf), obd.rpm_valid ? "%.1f" : "null", obd.rpm);
+    snprintf(speedBuf, sizeof(speedBuf), obd.speed_valid ? "%.1f" : "null", obd.speed_kmh);
+    snprintf(throttleBuf, sizeof(throttleBuf), obd.throttle_valid ? "%.1f" : "null", obd.throttle_pct);
+    snprintf(coolantBuf, sizeof(coolantBuf), obd.coolant_valid ? "%.1f" : "null", obd.coolant_temp_c);
+    snprintf(loadBuf, sizeof(loadBuf), obd.engine_load_valid ? "%.1f" : "null", obd.engine_load_pct);
+
+    char payload[256];
+    time_t now = time(nullptr);
+    snprintf(payload, sizeof(payload),
+        "{\"ts\":%ld,\"mode\":\"normal\","
+        "\"speed_kmh\":%s,\"rpm\":%s,\"throttle_pct\":%s,"
+        "\"coolant_temp_c\":%s,\"engine_load_pct\":%s}",
+        now, speedBuf, rpmBuf, throttleBuf, coolantBuf, loadBuf);
+
+    return s_mqttClient.publish(_obdTopic, payload);
+}
+
 bool MQTTPublisher::isConnected() const {
     return s_mqttClient.connected();
 }
+
 
 bool MQTTPublisher::_connectWifi() {
     Serial.print(F("[MQTT] Connecting to WiFi"));
