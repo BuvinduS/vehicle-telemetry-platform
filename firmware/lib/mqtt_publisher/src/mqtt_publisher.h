@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "imu_sensor.h"
+#include "obd_poller.h"
 
 class MQTTPublisher {
 public:
@@ -13,6 +14,7 @@ public:
     bool begin();
     void loop();
     bool publish(const AccelData& accel);
+    bool publish(const ObdData& obd);
     bool isConnected() const;
 
 private:
@@ -22,6 +24,7 @@ private:
     uint16_t    _broker_port = 1883;
 
     char _topic[64] = "telemetry/vehicle/imu";
+    char _obdTopic[64] = "telemetry/vehicle/obd";
 
     bool _connectWifi();
     bool _connectBroker();
