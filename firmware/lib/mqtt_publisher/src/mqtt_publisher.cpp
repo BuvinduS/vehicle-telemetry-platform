@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <sys/time.h>
 
 static WiFiClient   s_wifiClient;
 static PubSubClient s_mqttClient(s_wifiClient);
@@ -46,15 +47,18 @@ void MQTTPublisher::loop() {
 bool MQTTPublisher::publish(const AccelData& accel) {
     if (!accel.valid || !s_mqttClient.connected()) return false;
 
-    char payload[128];
-    time_t now = time(nullptr);
-    snprintf(payload, sizeof(payload),
-        "{\"ts\":%ld,"
-        "\"accel_x\":%.3f,\"accel_y\":%.3f,\"accel_z\":%.3f}",
-        now, accel.x, accel.y, accel.z);
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    double ts = tv.tv_sec + tv.tv_usec / 1e6;
 
-        return s_mqttClient.publish(_topic, payload);
-    }
+    char payload[128];
+    snprintf(payload, sizeof(payload),
+        "{\"ts\":%.3f,"
+        "\"accel_x\":%.3f,\"accel_y\":%.3f,\"accel_z\":%.3f}",
+        ts, accel.x, accel.y, accel.z);
+
+    return s_mqttClient.publish(_topic, payload);
+}
 
 bool MQTTPublisher::publish(const ObdData& obd){
     if (!s_mqttClient.connected()) return false;
@@ -67,13 +71,16 @@ bool MQTTPublisher::publish(const ObdData& obd){
     snprintf(coolantBuf, sizeof(coolantBuf), obd.coolant_valid ? "%.1f" : "null", obd.coolant_temp_c);
     snprintf(loadBuf, sizeof(loadBuf), obd.engine_load_valid ? "%.1f" : "null", obd.engine_load_pct);
 
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    double ts = tv.tv_sec + tv.tv_usec / 1e6;
+
     char payload[256];
-    time_t now = time(nullptr);
     snprintf(payload, sizeof(payload),
-        "{\"ts\":%ld,\"mode\":\"normal\","
+        "{\"ts\":%.3f,\"mode\":\"normal\","
         "\"speed_kmh\":%s,\"rpm\":%s,\"throttle_pct\":%s,"
         "\"coolant_temp_c\":%s,\"engine_load_pct\":%s}",
-        now, speedBuf, rpmBuf, throttleBuf, coolantBuf, loadBuf);
+        ts, speedBuf, rpmBuf, throttleBuf, coolantBuf, loadBuf);
 
     return s_mqttClient.publish(_obdTopic, payload);
 }
