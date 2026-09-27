@@ -28,11 +28,6 @@ static const int CAN_MISO = 5;
 static const int CAN_CS   = 13;
 static const int CAN_INT  = 15;
 
-// --- New: Status LED pins ---
-static const int LED_WIFI_PIN = 45;   
-static const int LED_MQTT_PIN = 36;
-static const int LED_CAN_PIN  = 38;
-
 // Publish interval in milliseconds (~10Hz to match OBD publisher)
 static const unsigned long PUBLISH_INTERVAL_MS = 100;
 
@@ -60,18 +55,12 @@ static CalibrationNvs calibNvs;
 static CalibrationManager* calibManager = nullptr;
 static float prevSpeedKmh = 0.0f;
 static float prevTimestampSec = 0.0f;
-
-void updateStatusLed(uint8_t pin, bool active) {
-    digitalWrite(pin, active ? HIGH : LOW);
-}
+static float lastReferenceAccel = 0.0f; // temporary, for debug print visibility while tuning
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 void setup() {
-    pinMode(LED_WIFI_PIN, OUTPUT);
-    pinMode(LED_MQTT_PIN, OUTPUT);
-    pinMode(LED_CAN_PIN, OUTPUT);
     Serial.begin(115200);
     delay(500);
     Serial.println(F("\n[TELEMETRY] IMU Publisher starting..."));
@@ -91,7 +80,18 @@ void setup() {
     CalibrationData loadedCalib; // defaults all-invalid if load() below fails/finds nothing
     bool hasStored = calibNvs.load(loadedCalib);
     Serial.printf("[CALIB] Stored calibration %s.\n", hasStored ? "found, resuming" : "not found -- starting fresh");
-    calibManager = new CalibrationManager(loadedCalib);
+    // Thresholds dropped deliberately low right now -- purely to prove
+    // the mechanism can transition at all before tuning back up to
+    // something that won't false-trigger on ordinary driving noise.
+    calibManager = new CalibrationManager(
+        loadedCalib,
+        /*requiredStationarySamples=*/20,
+        /*requiredConsistentYawEvents=*/3,
+        /*yawTriggerThreshold=*/0.15f,
+        /*yawEndThreshold=*/0.05f,
+        /*yawMinSamplesToAnalyze=*/10,
+        /*yawMaxSamplesPerEvent=*/60
+    );
     prevTimestampSec = millis() / 1000.0f;
 
     // --- New: Init CAN/OBD2 ---
@@ -138,10 +138,6 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
-    updateStatusLed(LED_WIFI_PIN, WiFi.status() == WL_CONNECTED);
-    updateStatusLed(LED_MQTT_PIN, mqtt.isConnected());
-    updateStatusLed(LED_CAN_PIN, obdPoller.linkHealthy());
-
     obdPoller.update();
 
     if (now - lastPublish >= PUBLISH_INTERVAL_MS) {
@@ -151,27 +147,44 @@ void loop() {
         // speed_kmh/speed_valid alongside the IMU reading this cycle.
         ObdData obdData = obdPoller.getLatest();
 
+        // Note: lastReferenceAccel is intentionally NOT reset here --
+        // it needs to persist (hold) across ticks where no new OBD
+        // speed sample has arrived. See the holding logic below.
+
         AccelData accel = imu.getRawAccel();
         if (accel.valid) {
             Vector3 rawVec = { accel.x, accel.y, accel.z };
 
             bool isStationary = obdData.speed_valid && obdData.speed_kmh < STATIONARY_SPEED_THRESHOLD_KMH;
 
-            // Only advance the speed differentiator on a genuinely valid
-            // reading -- skipping invalid cycles means the next valid
-            // pair still spans real elapsed time correctly, rather than
-            // computing a bogus derivative against a stale/garbage value.
-            float referenceAccel = 0.0f;
+            // Only advance the differentiator's clock -- and only
+            // recompute a new reference value -- on a tick where the
+            // OBD speed value has genuinely changed. Doing this on
+            // every valid-but-unchanged tick (as before) reset dt to
+            // ~100ms even though the ECU only refreshes speed roughly
+            // once a second, inflating every computed value by ~10x
+            // AND causing every event to immediately truncate to 1
+            // sample the moment a repeat tick computed a correct 0.
+            // Holding the last real value across repeat ticks instead
+            // of snapping to 0 gives the event detector a sustained
+            // signal to actually buffer past minSamplesToAnalyze.
             if (obdData.speed_valid) {
-                float nowSeconds = now / 1000.0f;
-                referenceAccel = differentiateSpeedStep(prevSpeedKmh, prevTimestampSec,
-                                                         obdData.speed_kmh, nowSeconds);
-                prevSpeedKmh = obdData.speed_kmh;
-                prevTimestampSec = nowSeconds;
+                if (obdData.speed_kmh != prevSpeedKmh) {
+                    float nowSeconds = now / 1000.0f;
+                    lastReferenceAccel = differentiateSpeedStep(prevSpeedKmh, prevTimestampSec,
+                                                                 obdData.speed_kmh, nowSeconds);
+                    prevSpeedKmh = obdData.speed_kmh;
+                    prevTimestampSec = nowSeconds;
+                }
+                // else: stale repeat -- hold lastReferenceAccel as-is,
+                // don't touch prevSpeedKmh/prevTimestampSec (so the
+                // NEXT genuine change still measures real elapsed time).
+            } else {
+                lastReferenceAccel = 0.0f; // OBD itself invalid -- nothing to hold onto
             }
 
             // --- New: drive the calibration state machine ---
-            if (calibManager->update(rawVec, isStationary, referenceAccel)) {
+            if (calibManager->update(rawVec, isStationary, lastReferenceAccel)) {
                 // A real transition happened (tilt just completed, or
                 // yaw just locked) -- worth persisting. This fires at
                 // most twice per calibration lifecycle, never every
@@ -190,14 +203,19 @@ void loop() {
         }
 
         // --- Debug print, field-test only ---
+        // referenceAccel added temporarily to diagnose why yaw isn't
+        // locking -- watch for it dropping to 0 mid-acceleration
+        // (stale/unchanged OBD speed reading), not just whether it
+        // crosses the trigger threshold at all.
         Serial.printf(
-            "[OBD] rpm=%.1f(%d) speed=%.1f(%d) throttle=%.1f(%d) coolant=%.1f(%d) load=%.1f(%d) | calib=%d\n",
+            "[OBD] rpm=%.1f(%d) speed=%.1f(%d) throttle=%.1f(%d) coolant=%.1f(%d) load=%.1f(%d) | calib=%d ref=%.2f\n",
             obdData.rpm,            obdData.rpm_valid,
             obdData.speed_kmh,      obdData.speed_valid,
             obdData.throttle_pct,   obdData.throttle_valid,
             obdData.coolant_temp_c, obdData.coolant_valid,
             obdData.engine_load_pct, obdData.engine_load_valid,
-            static_cast<int>(calibManager->state())
+            static_cast<int>(calibManager->state()),
+            lastReferenceAccel
         );
 
         if (!mqtt.publish(obdData)) {
