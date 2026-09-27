@@ -25,11 +25,14 @@ public:
     void update();
 
     ObdData getLatest() const { return latest_; }
+    bool linkHealthy() const { return consecutiveTimeouts_ < LINK_TIMEOUT_THRESHOLD; }
 
 private:
     obd::OBD2& obd2_;
     ObdData    latest_;
     size_t     pidIndex_ = 0;
+    uint8_t consecutiveTimeouts_ = 0;
+    static constexpr uint8_t LINK_TIMEOUT_THRESHOLD = 3; // >half a 5-PID sweep
 
     void applyResult(uint8_t pid, float value);
     void markInvalid(uint8_t pid);

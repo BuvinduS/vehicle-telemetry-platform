@@ -12,7 +12,9 @@ void ObdPoller::update() {
             // failure), we simply try again next update() call with the
             // same pidIndex_ -- no special handling needed since IDLE
             // means nothing is lost by retrying.
-            obd2_.requestPID(pid);
+            if (!obd2_.requestPID(pid)) {
+                if (consecutiveTimeouts_ < 255) consecutiveTimeouts_++;  // saturate, don't wrap
+            }
             break;
         }
 
@@ -21,6 +23,7 @@ void ObdPoller::update() {
             uint8_t pid = CORE_PIDS[pidIndex_].pid;
             if (obd2_.getResult(value)) {
                 applyResult(pid, value);
+                consecutiveTimeouts_ = 0;   // any success clears the counter
             }
             pidIndex_ = (pidIndex_ + 1) % CORE_PID_COUNT;
             break;
@@ -30,6 +33,7 @@ void ObdPoller::update() {
             uint8_t pid = CORE_PIDS[pidIndex_].pid;
             markInvalid(pid);
             obd2_.clearTimeout();
+            consecutiveTimeouts_++;
             pidIndex_ = (pidIndex_ + 1) % CORE_PID_COUNT;
             break;
         }

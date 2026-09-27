@@ -28,6 +28,11 @@ static const int CAN_MISO = 5;
 static const int CAN_CS   = 13;
 static const int CAN_INT  = 15;
 
+// --- New: Status LED pins ---
+static const int LED_WIFI_PIN = 45;   
+static const int LED_MQTT_PIN = 36;
+static const int LED_CAN_PIN  = 38;
+
 // Publish interval in milliseconds (~10Hz to match OBD publisher)
 static const unsigned long PUBLISH_INTERVAL_MS = 100;
 
@@ -56,10 +61,17 @@ static CalibrationManager* calibManager = nullptr;
 static float prevSpeedKmh = 0.0f;
 static float prevTimestampSec = 0.0f;
 
+void updateStatusLed(uint8_t pin, bool active) {
+    digitalWrite(pin, active ? HIGH : LOW);
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 void setup() {
+    pinMode(LED_WIFI_PIN, OUTPUT);
+    pinMode(LED_MQTT_PIN, OUTPUT);
+    pinMode(LED_CAN_PIN, OUTPUT);
     Serial.begin(115200);
     delay(500);
     Serial.println(F("\n[TELEMETRY] IMU Publisher starting..."));
@@ -125,6 +137,10 @@ void setup() {
 // ---------------------------------------------------------------------------
 void loop() {
     unsigned long now = millis();
+
+    updateStatusLed(LED_WIFI_PIN, WiFi.status() == WL_CONNECTED);
+    updateStatusLed(LED_MQTT_PIN, mqtt.isConnected());
+    updateStatusLed(LED_CAN_PIN, obdPoller.linkHealthy());
 
     obdPoller.update();
 
