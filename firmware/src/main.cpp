@@ -65,6 +65,7 @@ static float lastReferenceAccel = 0.0f; // temporary, for debug print visibility
 static float accSumX = 0, accSumY = 0, accSumZ = 0;
 static int   accCount = 0;
 static int   lastPrintedWindows = 0; // for the per-window yaw diagnostic print
+static int   lastPrintedResets = 0;  // for the stale-tilt auto-recalibration message
 
 // --- Wireless debug log ------------------------------------------------------
 // Mirrors selected diagnostic lines to the dev laptop (same machine as the MQTT
@@ -240,6 +241,11 @@ void loop() {
                 bool saved = calibNvs.save(calibManager->getCalibration());
                 debugLog("[CALIB] state changed -> %d, save %s\n",
                               static_cast<int>(calibManager->state()), saved ? "OK" : "FAILED");
+                if (calibManager->tiltAutoResets() != lastPrintedResets) {
+                    lastPrintedResets = calibManager->tiltAutoResets();
+                    debugLog("[CALIB] stored tilt was %.0f deg off while parked -> tilt recomputed, yaw will re-learn\n",
+                             calibManager->lastTiltErrorDeg());
+                }
             }
 
             // --- Diagnostic: one line each time a yaw window completes ---

@@ -43,6 +43,10 @@ public:
     bool update(float tiltCorrectedX, float tiltCorrectedY, float referenceAccel,
                 bool isFreshSample, YawCandidate& outCandidate);
 
+    // Discard any in-progress window (used when the tilt frame changes underneath it).
+    // windowsCompleted() is intentionally NOT reset -- it stays monotonic for logging.
+    void restart() { reset(); }
+
     // --- Diagnostics (read-only; used for field-test logging) ---
     size_t bufferedCount() const { return count_; }
     int windowsCompleted() const { return windowsCompleted_; }

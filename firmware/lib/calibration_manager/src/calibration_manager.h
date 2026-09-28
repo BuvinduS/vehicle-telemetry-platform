@@ -29,7 +29,8 @@ public:
                                  float yawTriggerThreshold = 1.5f,
                                  float yawEndThreshold = 0.5f,
                                  size_t yawMinSamplesToAnalyze = 10,
-                                 size_t yawMaxSamplesPerEvent = 60);
+                                 size_t yawMaxSamplesPerEvent = 60,
+                                 float staleTiltThresholdDeg = 15.0f);
 
     CalibrationState state() const { return state_; }
 
@@ -59,13 +60,26 @@ public:
 
     const CalibrationData& getCalibration() const { return data_; }
 
+    // Stale-tilt guard diagnostics. The guard runs whenever the vehicle is stationary and
+    // state() != NeedsTilt: if corrected gravity is more than staleTiltThresholdDeg away
+    // from vertical, the stored tilt no longer matches how the unit is mounted, so tilt is
+    // recomputed from that stationary reading and yaw is cleared to be re-learned.
+    int tiltAutoResets() const { return tiltAutoResets_; }
+    float lastTiltErrorDeg() const { return lastTiltErrorDeg_; }
+
     // Read-only access for field-test diagnostics (per-window correlation logging).
     const YawEventDetector& yawDetector() const { return yawEventDetector_; }
 
 private:
     CalibrationData data_;
     CalibrationState state_;
+    bool recomputeTiltIfStale(Vector3 stationaryGravity);
+
     GravityAverager gravityAverager_;
+    GravityAverager staleCheckAverager_;
+    float staleTiltThresholdDeg_;
+    int tiltAutoResets_ = 0;
+    float lastTiltErrorDeg_ = 0.0f;
     YawEventDetector yawEventDetector_;
     YawCalibrationTracker yawTracker_;
 };
