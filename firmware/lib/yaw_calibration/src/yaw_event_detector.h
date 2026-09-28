@@ -25,16 +25,23 @@ public:
                       size_t minSamplesToAnalyze = 10,
                       size_t maxSamples = 60);
 
-    // Call once per sample tick with the latest tilt-corrected accel
-    // and the latest reference accel (see differentiateSpeedStep
-    // below). Returns true and fills outCandidate if an event just
-    // completed and was analyzed (candidate may itself be
-    // Undetermined -- that's still a completed analysis, distinct from
-    // "event discarded as too short", which returns false). Returns
-    // false while idle, mid-buffering, or after discarding a too-short
-    // event.
+    // Call once per sample tick with the latest tilt-corrected accel,
+    // the latest reference accel, and whether this tick's reference
+    // value is a GENUINELY fresh OBD reading (vs. a repeat of the last
+    // one, because OBD speed updates far less often than the sample
+    // rate this is called at). Stale ticks are a complete no-op --
+    // not buffered at all -- because correlateEvent() needs the
+    // buffered reference values to actually vary to mean anything;
+    // buffering a held/repeated constant produces zero variance and
+    // Pearson correlation is undefined for that, so it silently comes
+    // back Undetermined regardless of the real magnitude. Returns true
+    // and fills outCandidate if an event just completed and was
+    // analyzed (candidate may itself be Undetermined -- that's still a
+    // completed analysis, distinct from "event discarded as too
+    // short"). Returns false while idle, mid-buffering, discarding a
+    // too-short event, or on any stale (non-fresh) tick.
     bool update(float tiltCorrectedX, float tiltCorrectedY, float referenceAccel,
-                YawCandidate& outCandidate);
+                bool isFreshSample, YawCandidate& outCandidate);
 
 private:
     enum class State { Idle, Buffering };

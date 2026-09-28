@@ -21,7 +21,8 @@ CalibrationManager::CalibrationManager(const CalibrationData& loaded,
       yawEventDetector_(yawTriggerThreshold, yawEndThreshold, yawMinSamplesToAnalyze, yawMaxSamplesPerEvent),
       yawTracker_(requiredConsistentYawEvents) {}
 
-bool CalibrationManager::update(Vector3 rawAccel, bool isStationary, float referenceAccel) {
+bool CalibrationManager::update(Vector3 rawAccel, bool isStationary, float referenceAccel,
+                                 bool isFreshReferenceSample) {
     switch (state_) {
         case CalibrationState::NeedsTilt: {
             Vector3 avgGravity;
@@ -38,7 +39,8 @@ bool CalibrationManager::update(Vector3 rawAccel, bool isStationary, float refer
 
             YawCandidate candidate;
             bool eventCompleted = yawEventDetector_.update(tiltCorrected.x, tiltCorrected.y,
-                                                            referenceAccel, candidate);
+                                                            referenceAccel, isFreshReferenceSample,
+                                                            candidate);
             if (!eventCompleted) return false;
 
             YawCalibrationResult result = yawTracker_.addEvent(candidate);

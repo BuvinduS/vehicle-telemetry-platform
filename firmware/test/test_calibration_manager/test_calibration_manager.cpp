@@ -55,7 +55,7 @@ void test_manager_starts_ready_when_fully_loaded(void) {
     CalibrationManager mgr(loaded);
     TEST_ASSERT_TRUE(mgr.state() == CalibrationState::Ready);
 
-    bool transitioned = mgr.update({1, 2, 9.81f}, true, 0.0f);
+    bool transitioned = mgr.update({1, 2, 9.81f}, true, 0.0f, true);
     TEST_ASSERT_FALSE(transitioned);
     TEST_ASSERT_TRUE(mgr.state() == CalibrationState::Ready);
 }
@@ -88,7 +88,7 @@ void test_manager_full_lifecycle_from_scratch(void) {
     Vector3 tiltedGravity = {6.936f, 0.0f, 6.936f};
     bool tiltDone = false;
     for (int i = 0; i < 5; i++) {
-        tiltDone = mgr.update(tiltedGravity, /*isStationary=*/true, 0.0f);
+        tiltDone = mgr.update(tiltedGravity, /*isStationary=*/true, 0.0f, /*isFreshReferenceSample=*/true);
     }
     TEST_ASSERT_TRUE(tiltDone);
     TEST_ASSERT_TRUE(mgr.state() == CalibrationState::NeedsYaw);
@@ -102,7 +102,7 @@ void test_manager_full_lifecycle_from_scratch(void) {
     for (int eventNum = 0; eventNum < 2 && !yawLocked; eventNum++) {
         for (float r : refs) {
             Vector3 raw = { tiltedGravity.x, r, tiltedGravity.z }; // event rides on raw Y
-            yawLocked = mgr.update(raw, /*isStationary=*/false, r);
+            yawLocked = mgr.update(raw, /*isStationary=*/false, r, /*isFreshReferenceSample=*/true);
             if (yawLocked) break;
         }
     }
@@ -131,6 +131,31 @@ void test_get_corrected_accel_is_identity_before_tilt_known(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, raw.z, corrected.z);
 }
 
+// Stale reference ticks (isFreshReferenceSample=false) during NeedsYaw
+// must not be able to trigger or complete a yaw event on their own --
+// only genuinely fresh samples should count. Mirrors the real bug
+// found during vehicle testing: held/repeated reference values have no
+// variance for correlateEvent() to work with.
+void test_stale_reference_ticks_dont_advance_yaw(void) {
+    CalibrationData loaded;
+    loaded.tiltValid = true;
+    loaded.tiltCorrection = identityRotation();
+    loaded.yawValid = false;
+
+    CalibrationManager mgr(loaded, 20, /*requiredConsistentYawEvents=*/2,
+                            1.5f, 0.5f, /*minSamples=*/3, /*maxSamples=*/20);
+
+    // 30 stale ticks holding an easily-triggering value -- none of
+    // these should move the state machine at all.
+    bool anyTransition = false;
+    for (int i = 0; i < 30; i++) {
+        anyTransition = mgr.update({0, 2.0f, 0}, false, 2.0f, /*isFreshReferenceSample=*/false)
+                         || anyTransition;
+    }
+    TEST_ASSERT_FALSE(anyTransition);
+    TEST_ASSERT_TRUE(mgr.state() == CalibrationState::NeedsYaw);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_averager_completes_after_required_samples);
@@ -139,5 +164,6 @@ int main(int argc, char **argv) {
     RUN_TEST(test_manager_resumes_at_needs_yaw_when_only_tilt_loaded);
     RUN_TEST(test_manager_full_lifecycle_from_scratch);
     RUN_TEST(test_get_corrected_accel_is_identity_before_tilt_known);
+    RUN_TEST(test_stale_reference_ticks_dont_advance_yaw);
     return UNITY_END();
 }

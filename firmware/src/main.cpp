@@ -168,6 +168,7 @@ void loop() {
             // Holding the last real value across repeat ticks instead
             // of snapping to 0 gives the event detector a sustained
             // signal to actually buffer past minSamplesToAnalyze.
+            bool isFreshReferenceSample = false;
             if (obdData.speed_valid) {
                 if (obdData.speed_kmh != prevSpeedKmh) {
                     float nowSeconds = now / 1000.0f;
@@ -175,16 +176,19 @@ void loop() {
                                                                  obdData.speed_kmh, nowSeconds);
                     prevSpeedKmh = obdData.speed_kmh;
                     prevTimestampSec = nowSeconds;
+                    isFreshReferenceSample = true;
                 }
-                // else: stale repeat -- hold lastReferenceAccel as-is,
-                // don't touch prevSpeedKmh/prevTimestampSec (so the
-                // NEXT genuine change still measures real elapsed time).
+                // else: stale repeat -- hold lastReferenceAccel for the
+                // debug print (below), but isFreshReferenceSample stays
+                // false so CalibrationManager's yaw event detector
+                // ignores this tick entirely rather than buffering a
+                // held/repeated value with no real variance.
             } else {
                 lastReferenceAccel = 0.0f; // OBD itself invalid -- nothing to hold onto
             }
 
             // --- New: drive the calibration state machine ---
-            if (calibManager->update(rawVec, isStationary, lastReferenceAccel)) {
+            if (calibManager->update(rawVec, isStationary, lastReferenceAccel, isFreshReferenceSample)) {
                 // A real transition happened (tilt just completed, or
                 // yaw just locked) -- worth persisting. This fires at
                 // most twice per calibration lifecycle, never every

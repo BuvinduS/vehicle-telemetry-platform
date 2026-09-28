@@ -27,7 +27,9 @@ bool YawEventDetector::analyzeAndReset(YawCandidate& outCandidate) {
 }
 
 bool YawEventDetector::update(float tiltCorrectedX, float tiltCorrectedY, float referenceAccel,
-                               YawCandidate& outCandidate) {
+                               bool isFreshSample, YawCandidate& outCandidate) {
+    if (!isFreshSample) return false; // stale repeat -- completely invisible to this state machine
+
     float absRef = fabsf(referenceAccel);
 
     if (state_ == State::Idle) {

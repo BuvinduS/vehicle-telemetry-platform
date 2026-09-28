@@ -40,10 +40,15 @@ public:
     // - referenceAccel: OBD-speed-derived reference acceleration (see
     //   differentiateSpeedStep). Only consulted while
     //   state() == NeedsYaw; pass 0 while stationary/irrelevant.
+    // - isFreshReferenceSample: whether referenceAccel is a genuinely
+    //   new OBD reading this tick, vs. a held/repeated value from the
+    //   last one. Only matters while state() == NeedsYaw -- ignored
+    //   entirely during NeedsTilt, since gravity averaging correctly
+    //   uses every raw accel tick regardless of OBD freshness.
     // Returns true if a transition just happened that's worth
     // persisting (tilt just completed, or yaw just locked) -- caller
     // should save getCalibration() via CalibrationNvs when this is true.
-    bool update(Vector3 rawAccel, bool isStationary, float referenceAccel);
+    bool update(Vector3 rawAccel, bool isStationary, float referenceAccel, bool isFreshReferenceSample);
 
     // Tilt- and (once known) yaw-corrected acceleration, using
     // whatever correction is currently available. Before tilt is
