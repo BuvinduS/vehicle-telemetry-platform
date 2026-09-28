@@ -162,6 +162,55 @@ void test_tracker_ignores_undetermined_events(void) {
 
 // --- Runner --------------------------------------------------------------
 
+
+// --- fitHeading (diagnostic / continuous-angle estimate) -------------------
+
+static float wrapDiffDeg(float a, float b) {
+    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f;
+    return fabsf(d);
+}
+
+// Build a window where the true forward direction sits at `deg` from +X,
+// with a small orthogonal noise term, and check fitHeading recovers it.
+static void check_heading(float deg) {
+    const int n = 8;
+    float ref[n] = {1.4f, 0.6f, 1.0f, -0.5f, -0.9f, -1.8f, 0.5f, 0.2f};
+    float ax[n], ay[n];
+    float c = cosf(deg * 0.0174533f), s = sinf(deg * 0.0174533f);
+    for (int i = 0; i < n; i++) {
+        float noiseLat = ((i % 3) - 1) * 0.05f;
+        ax[i] = c * ref[i] - s * noiseLat;
+        ay[i] = s * ref[i] + c * noiseLat;
+    }
+    HeadingFit fit = fitHeading(ax, ay, ref, n);
+    TEST_ASSERT_TRUE(wrapDiffDeg(fit.angleDeg, deg) < 5.0f);
+    TEST_ASSERT_TRUE(fit.projectedCorr > 0.95f);
+}
+
+void test_fit_heading_axis_aligned_x(void)   { check_heading(0.0f); }
+void test_fit_heading_axis_aligned_y(void)   { check_heading(90.0f); }
+void test_fit_heading_inverted_x(void)       { check_heading(180.0f); }
+void test_fit_heading_diagonal_30(void)      { check_heading(30.0f); }
+void test_fit_heading_diagonal_45(void)      { check_heading(45.0f); }
+void test_fit_heading_diagonal_neg120(void)  { check_heading(-120.0f); }
+
+// The failure mode suspected in the field: a diagonal mount makes X and Y
+// correlate about equally, so the discrete axis picker refuses to choose,
+// while the continuous fit still recovers the direction cleanly.
+void test_diagonal_mount_defeats_axis_picker_but_not_heading_fit(void) {
+    const int n = 8;
+    float ref[n] = {1.4f, 0.6f, 1.0f, -0.5f, -0.9f, -1.8f, 0.5f, 0.2f};
+    float ax[n], ay[n];
+    for (int i = 0; i < n; i++) { ax[i] = 0.7071f * ref[i]; ay[i] = 0.7071f * ref[i]; } // exactly 45 deg
+
+    YawCandidate pick = candidateFromCorrelation(correlateEvent(ax, ay, ref, n));
+    TEST_ASSERT_TRUE(pick.axis == LongitudinalAxis::Undetermined);
+
+    HeadingFit fit = fitHeading(ax, ay, ref, n);
+    TEST_ASSERT_TRUE(wrapDiffDeg(fit.angleDeg, 45.0f) < 2.0f);
+    TEST_ASSERT_TRUE(fit.projectedCorr > 0.99f);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_differentiate_constant_acceleration);
@@ -174,5 +223,12 @@ int main(int argc, char **argv) {
     RUN_TEST(test_tracker_locks_after_required_consistent_events);
     RUN_TEST(test_tracker_restarts_streak_on_conflicting_event);
     RUN_TEST(test_tracker_ignores_undetermined_events);
+    RUN_TEST(test_fit_heading_axis_aligned_x);
+    RUN_TEST(test_fit_heading_axis_aligned_y);
+    RUN_TEST(test_fit_heading_inverted_x);
+    RUN_TEST(test_fit_heading_diagonal_30);
+    RUN_TEST(test_fit_heading_diagonal_45);
+    RUN_TEST(test_fit_heading_diagonal_neg120);
+    RUN_TEST(test_diagonal_mount_defeats_axis_picker_but_not_heading_fit);
     return UNITY_END();
 }

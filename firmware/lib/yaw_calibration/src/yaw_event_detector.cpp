@@ -20,6 +20,10 @@ bool YawEventDetector::analyzeAndReset(YawCandidate& outCandidate) {
     if (count_ >= minSamplesToAnalyze_) {
         EventCorrelation corr = correlateEvent(bufferX_, bufferY_, bufferRef_, count_);
         outCandidate = candidateFromCorrelation(corr);
+        lastCorr_ = corr;
+        lastFit_ = fitHeading(bufferX_, bufferY_, bufferRef_, count_);
+        lastCandidate_ = outCandidate;
+        windowsCompleted_++;
         produced = true; // even an Undetermined result counts as a completed analysis
     }
     reset();

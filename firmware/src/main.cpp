@@ -3,6 +3,8 @@
 #include "imu_sensor.h"
 #include "mqtt_publisher.h"
 #include <WiFi.h>
+#include <WiFiUdp.h>
+#include <stdarg.h>
 #include <SPI.h>
 #include <transports/MCP2515Transport.h>
 #include <OBD2.h>
@@ -56,6 +58,39 @@ static CalibrationManager* calibManager = nullptr;
 static float prevSpeedKmh = 0.0f;
 static float prevTimestampSec = 0.0f;
 static float lastReferenceAccel = 0.0f; // temporary, for debug print visibility while tuning
+// Raw accel accumulated since the last fresh OBD speed update. Each fresh
+// reference value is the AVERAGE acceleration over that interval, so it gets
+// paired with the average IMU reading over the same interval rather than one
+// noisy instantaneous sample (engine/road vibration would swamp it).
+static float accSumX = 0, accSumY = 0, accSumZ = 0;
+static int   accCount = 0;
+static int   lastPrintedWindows = 0; // for the per-window yaw diagnostic print
+
+// --- Wireless debug log ------------------------------------------------------
+// Mirrors selected diagnostic lines to the dev laptop (same machine as the MQTT
+// broker) over UDP, so a USB cable isn't needed during a test drive. Entirely
+// separate from MQTT: no topics, no dashboard/DB impact. Fire-and-forget.
+// On the laptop:  see the receiver one-liner in the notes for this step.
+static const uint16_t DEBUG_UDP_PORT = 5005;
+static WiFiUDP   dbgUdp;
+static IPAddress dbgTarget;
+static bool      dbgTargetValid = false;
+
+static void debugLog(const char* fmt, ...) {
+    char buf[200];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    Serial.print(buf);
+    if (dbgTargetValid && WiFi.status() == WL_CONNECTED) {
+        dbgUdp.beginPacket(dbgTarget, DEBUG_UDP_PORT);
+        dbgUdp.write(reinterpret_cast<const uint8_t*>(buf), strlen(buf));
+        dbgUdp.endPacket();
+    }
+}
+static unsigned long lastStatMs = 0;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -88,9 +123,9 @@ void setup() {
         /*requiredStationarySamples=*/20,
         /*requiredConsistentYawEvents=*/3,
         /*yawTriggerThreshold=*/0.15f,
-        /*yawEndThreshold=*/0.05f,
-        /*yawMinSamplesToAnalyze=*/10,
-        /*yawMaxSamplesPerEvent=*/60
+        /*yawEndThreshold=*/0.05f,   // effectively unused now: real updates never read this low
+        /*yawMinSamplesToAnalyze=*/6,
+        /*yawMaxSamplesPerEvent=*/8  // fixed window of ~8 real OBD updates (~8s of changing speed)
     );
     prevTimestampSec = millis() / 1000.0f;
 
@@ -109,6 +144,9 @@ void setup() {
         Serial.println(F("[TELEMETRY] MQTT init failed — retrying in 5s..."));
         delay(5000);
     }
+
+    dbgTargetValid = dbgTarget.fromString(BROKER_IP);
+    if (dbgTargetValid) debugLog("[DBG] wireless debug log -> %s:%u\n", BROKER_IP, DEBUG_UDP_PORT);
 
     configTime(0, 0, "pool.ntp.org");
     Serial.print(F("[TIME] Syncing NTP..."));
@@ -157,17 +195,17 @@ void loop() {
 
             bool isStationary = obdData.speed_valid && obdData.speed_kmh < STATIONARY_SPEED_THRESHOLD_KMH;
 
-            // Only advance the differentiator's clock -- and only
-            // recompute a new reference value -- on a tick where the
-            // OBD speed value has genuinely changed. Doing this on
-            // every valid-but-unchanged tick (as before) reset dt to
-            // ~100ms even though the ECU only refreshes speed roughly
-            // once a second, inflating every computed value by ~10x
-            // AND causing every event to immediately truncate to 1
-            // sample the moment a repeat tick computed a correct 0.
-            // Holding the last real value across repeat ticks instead
-            // of snapping to 0 gives the event detector a sustained
-            // signal to actually buffer past minSamplesToAnalyze.
+            // Accumulate raw accel every tick; it gets averaged and consumed
+            // when the next genuinely new OBD speed value arrives.
+            accSumX += rawVec.x; accSumY += rawVec.y; accSumZ += rawVec.z;
+            accCount++;
+
+            // OBD speed only refreshes about once a second and in whole km/h
+            // steps, so most ticks just repeat the previous value. Only a tick
+            // where the value actually CHANGED is a real data point: it advances
+            // the differentiator's clock (so dt spans the real gap between two
+            // distinct readings) and is the only kind of tick the yaw detector
+            // is allowed to buffer.
             bool isFreshReferenceSample = false;
             if (obdData.speed_valid) {
                 if (obdData.speed_kmh != prevSpeedKmh) {
@@ -178,28 +216,60 @@ void loop() {
                     prevTimestampSec = nowSeconds;
                     isFreshReferenceSample = true;
                 }
-                // else: stale repeat -- hold lastReferenceAccel for the
-                // debug print (below), but isFreshReferenceSample stays
-                // false so CalibrationManager's yaw event detector
-                // ignores this tick entirely rather than buffering a
-                // held/repeated value with no real variance.
+                // else: stale repeat. lastReferenceAccel is kept only so the
+                // debug print stays readable; the detector ignores this tick.
             } else {
                 lastReferenceAccel = 0.0f; // OBD itself invalid -- nothing to hold onto
             }
 
+            // On a fresh tick, hand the yaw stage the AVERAGE accel over the same
+            // interval the reference value describes. On stale ticks the yaw stage
+            // ignores the sample anyway, and the tilt stage wants per-tick values.
+            Vector3 accelForCalib = rawVec;
+            if (isFreshReferenceSample && accCount > 0) {
+                accelForCalib = { accSumX / accCount, accSumY / accCount, accSumZ / accCount };
+                accSumX = accSumY = accSumZ = 0; accCount = 0;
+            }
+
             // --- New: drive the calibration state machine ---
-            if (calibManager->update(rawVec, isStationary, lastReferenceAccel, isFreshReferenceSample)) {
+            if (calibManager->update(accelForCalib, isStationary, lastReferenceAccel, isFreshReferenceSample)) {
                 // A real transition happened (tilt just completed, or
                 // yaw just locked) -- worth persisting. This fires at
                 // most twice per calibration lifecycle, never every
                 // tick, so flash write endurance isn't a concern here.
                 bool saved = calibNvs.save(calibManager->getCalibration());
-                Serial.printf("[CALIB] state changed -> %d, save %s\n",
+                debugLog("[CALIB] state changed -> %d, save %s\n",
                               static_cast<int>(calibManager->state()), saved ? "OK" : "FAILED");
+            }
+
+            // --- Diagnostic: one line each time a yaw window completes ---
+            // corrX/corrY: correlation of each tilt-corrected horizontal axis with
+            //   the OBD-derived reference. Need |max| >= 0.5 and a gap >= 0.15.
+            // angle/proj: best-fit forward direction (deg from +X toward +Y) and how
+            //   well accel projected on it tracks the reference (want > ~0.7).
+            const YawEventDetector& yd = calibManager->yawDetector();
+            if (yd.windowsCompleted() != lastPrintedWindows) {
+                lastPrintedWindows = yd.windowsCompleted();
+                debugLog("[YAW] window %d: corrX=%.2f corrY=%.2f | angle=%.0fdeg proj=%.2f | pick=%d\n",
+                              yd.windowsCompleted(),
+                              yd.lastCorrelation().corrWithX, yd.lastCorrelation().corrWithY,
+                              yd.lastHeadingFit().angleDeg, yd.lastHeadingFit().projectedCorr,
+                              static_cast<int>(yd.lastCandidate().axis)); // 0=X 1=Y 2=Undetermined
             }
 
             Vector3 correctedVec = calibManager->getCorrectedAccel(rawVec);
             AccelData correctedAccel = { correctedVec.x, correctedVec.y, correctedVec.z, true };
+
+            // Compact 1 Hz status. acc = tilt(+yaw)-corrected accel: when parked and
+            // level, z should be ~9.8 and x/y ~0 (quick check that stored tilt is valid).
+            if (now - lastStatMs >= 1000) {
+                lastStatMs = now;
+                debugLog("[STAT] calib=%d buf=%u win=%d speed=%.0f ref=%.2f acc=(%.2f,%.2f,%.2f)\n",
+                         static_cast<int>(calibManager->state()),
+                         (unsigned)yd.bufferedCount(), yd.windowsCompleted(),
+                         obdData.speed_kmh, lastReferenceAccel,
+                         correctedVec.x, correctedVec.y, correctedVec.z);
+            }
 
             if (!mqtt.publish(correctedAccel)) {
                 Serial.println(F("[TELEMETRY] IMU publish failed."));
@@ -212,14 +282,15 @@ void loop() {
         // (stale/unchanged OBD speed reading), not just whether it
         // crosses the trigger threshold at all.
         Serial.printf(
-            "[OBD] rpm=%.1f(%d) speed=%.1f(%d) throttle=%.1f(%d) coolant=%.1f(%d) load=%.1f(%d) | calib=%d ref=%.2f\n",
+            "[OBD] rpm=%.1f(%d) speed=%.1f(%d) throttle=%.1f(%d) coolant=%.1f(%d) load=%.1f(%d) | calib=%d ref=%.2f buf=%u\n",
             obdData.rpm,            obdData.rpm_valid,
             obdData.speed_kmh,      obdData.speed_valid,
             obdData.throttle_pct,   obdData.throttle_valid,
             obdData.coolant_temp_c, obdData.coolant_valid,
             obdData.engine_load_pct, obdData.engine_load_valid,
             static_cast<int>(calibManager->state()),
-            lastReferenceAccel
+            lastReferenceAccel,
+            (unsigned)calibManager->yawDetector().bufferedCount()
         );
 
         if (!mqtt.publish(obdData)) {

@@ -89,3 +89,32 @@ void YawCalibrationTracker::reset() {
     hasLastCandidate_ = false;
     lastCandidate_ = { LongitudinalAxis::Undetermined, 0.0f };
 }
+
+HeadingFit fitHeading(const float* ax, const float* ay, const float* ref, size_t n) {
+    HeadingFit fit = {0.0f, 0.0f};
+    if (n < 2) return fit;
+    if (n > 128) n = 128; // matches YawEventDetector's fixed buffer capacity
+
+    float meanX = 0, meanY = 0, meanR = 0;
+    for (size_t i = 0; i < n; i++) { meanX += ax[i]; meanY += ay[i]; meanR += ref[i]; }
+    meanX /= n; meanY /= n; meanR /= n;
+
+    // Covariance of each axis with the reference. The direction (covX, covY)
+    // is the horizontal direction along which accel best tracks the reference.
+    float covX = 0, covY = 0;
+    for (size_t i = 0; i < n; i++) {
+        float dr = ref[i] - meanR;
+        covX += (ax[i] - meanX) * dr;
+        covY += (ay[i] - meanY) * dr;
+    }
+    if (fabsf(covX) < 1e-9f && fabsf(covY) < 1e-9f) return fit;
+
+    float theta = atan2f(covY, covX);
+    fit.angleDeg = theta * 57.2957795f;
+
+    float c = cosf(theta), s = sinf(theta);
+    float projected[128];
+    for (size_t i = 0; i < n; i++) projected[i] = c * ax[i] + s * ay[i];
+    fit.projectedCorr = pearson(projected, ref, n);
+    return fit;
+}

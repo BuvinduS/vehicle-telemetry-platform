@@ -16,6 +16,9 @@
 
 #include <stddef.h>
 
+// NOTE: these integer values get persisted to flash (see
+// calibration_serializer) -- don't reorder or renumber this enum
+// without a version bump there.
 enum class LongitudinalAxis { X, Y, Undetermined };
 
 struct EventCorrelation {
@@ -55,6 +58,18 @@ EventCorrelation correlateEvent(const float* tiltCorrectedAccelX,
 // Undetermined if neither axis correlates strongly enough, or the two
 // axes are too close to call (ambiguous event -- not a clean accel/brake).
 YawCandidate candidateFromCorrelation(const EventCorrelation& corr);
+
+// Diagnostic / continuous-angle estimate: the direction in the horizontal
+// plane along which accel best tracks the reference. angleDeg is measured
+// from +X toward +Y (range -180..180, so it also encodes forward vs
+// backward). projectedCorr is the Pearson correlation of accel projected
+// onto that direction against the reference -- how trustworthy the angle is.
+struct HeadingFit {
+    float angleDeg;
+    float projectedCorr;
+};
+HeadingFit fitHeading(const float* accelX, const float* accelY,
+                      const float* referenceAccel, size_t sampleCount);
 
 // Tracks candidates across multiple events; only locks in once several
 // CONSECUTIVE events agree on both axis and sign.

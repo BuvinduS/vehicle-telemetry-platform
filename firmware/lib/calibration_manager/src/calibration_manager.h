@@ -59,6 +59,9 @@ public:
 
     const CalibrationData& getCalibration() const { return data_; }
 
+    // Read-only access for field-test diagnostics (per-window correlation logging).
+    const YawEventDetector& yawDetector() const { return yawEventDetector_; }
+
 private:
     CalibrationData data_;
     CalibrationState state_;

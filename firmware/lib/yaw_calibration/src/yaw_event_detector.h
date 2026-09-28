@@ -43,6 +43,13 @@ public:
     bool update(float tiltCorrectedX, float tiltCorrectedY, float referenceAccel,
                 bool isFreshSample, YawCandidate& outCandidate);
 
+    // --- Diagnostics (read-only; used for field-test logging) ---
+    size_t bufferedCount() const { return count_; }
+    int windowsCompleted() const { return windowsCompleted_; }
+    const EventCorrelation& lastCorrelation() const { return lastCorr_; }
+    const HeadingFit& lastHeadingFit() const { return lastFit_; }
+    const YawCandidate& lastCandidate() const { return lastCandidate_; }
+
 private:
     enum class State { Idle, Buffering };
 
@@ -60,6 +67,11 @@ private:
     float bufferY_[kMaxCapacity];
     float bufferRef_[kMaxCapacity];
     size_t count_;
+
+    int windowsCompleted_ = 0;
+    EventCorrelation lastCorr_ = {0.0f, 0.0f};
+    HeadingFit lastFit_ = {0.0f, 0.0f};
+    YawCandidate lastCandidate_ = {LongitudinalAxis::Undetermined, 0.0f};
 };
 
 // Single-step version of the OBD-speed-to-accel differentiation, for
