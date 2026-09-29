@@ -53,6 +53,7 @@ public:
     const EventCorrelation& lastCorrelation() const { return lastCorr_; }
     const HeadingFit& lastHeadingFit() const { return lastFit_; }
     const YawCandidate& lastCandidate() const { return lastCandidate_; }
+    const WindowStats& lastWindowStats() const { return lastStats_; }
 
 private:
     enum class State { Idle, Buffering };
@@ -76,6 +77,7 @@ private:
     EventCorrelation lastCorr_ = {0.0f, 0.0f};
     HeadingFit lastFit_ = {0.0f, 0.0f};
     YawCandidate lastCandidate_ = {LongitudinalAxis::Undetermined, 0.0f};
+    WindowStats lastStats_ = {0, 0, 0, 0, 0, 0};
 };
 
 // Single-step version of the OBD-speed-to-accel differentiation, for

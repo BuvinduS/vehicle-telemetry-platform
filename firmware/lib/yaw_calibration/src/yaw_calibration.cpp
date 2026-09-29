@@ -118,3 +118,92 @@ HeadingFit fitHeading(const float* ax, const float* ay, const float* ref, size_t
     fit.projectedCorr = pearson(projected, ref, n);
     return fit;
 }
+
+// ---------------------------------------------------------------------------
+// Pooled continuous-heading estimation
+// ---------------------------------------------------------------------------
+
+WindowStats computeWindowStats(const float* ax, const float* ay, const float* ref, size_t n) {
+    WindowStats s = {0, 0, 0, 0, 0, 0};
+    if (n < 2) return s;
+
+    float mx = 0, my = 0, mr = 0;
+    for (size_t i = 0; i < n; i++) { mx += ax[i]; my += ay[i]; mr += ref[i]; }
+    mx /= n; my /= n; mr /= n;
+
+    for (size_t i = 0; i < n; i++) {
+        float dx = ax[i] - mx, dy = ay[i] - my, dr = ref[i] - mr;
+        s.covXR += dx * dr;
+        s.covYR += dy * dr;
+        s.sxx += dx * dx;
+        s.syy += dy * dy;
+        s.sxy += dx * dy;
+        s.srr += dr * dr;
+    }
+    return s;
+}
+
+namespace {
+float angularDiffDeg(float a, float b) {
+    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f;
+    return fabsf(d);
+}
+} // namespace
+
+HeadingTracker::HeadingTracker(int minWindows, float minPooledCorr,
+                               float stableToleranceDeg, int stableCount)
+    : minWindows_(minWindows),
+      minPooledCorr_(minPooledCorr),
+      stableToleranceDeg_(stableToleranceDeg),
+      stableCount_(stableCount > kMaxHistory ? kMaxHistory : stableCount) {
+    reset();
+}
+
+void HeadingTracker::reset() {
+    pooled_ = {0, 0, 0, 0, 0, 0};
+    est_ = HeadingEstimate();
+    historyCount_ = 0;
+}
+
+const HeadingEstimate& HeadingTracker::addWindow(const WindowStats& w) {
+    if (est_.locked) return est_;
+
+    pooled_.covXR += w.covXR;
+    pooled_.covYR += w.covYR;
+    pooled_.sxx += w.sxx;
+    pooled_.syy += w.syy;
+    pooled_.sxy += w.sxy;
+    pooled_.srr += w.srr;
+    est_.windows++;
+
+    if (fabsf(pooled_.covXR) < 1e-9f && fabsf(pooled_.covYR) < 1e-9f) return est_; // no signal yet
+
+    float theta = atan2f(pooled_.covYR, pooled_.covXR);
+    float c = cosf(theta), s = sinf(theta);
+    float num = c * pooled_.covXR + s * pooled_.covYR;
+    float varProj = c * c * pooled_.sxx + 2 * c * s * pooled_.sxy + s * s * pooled_.syy;
+    float denom = sqrtf(varProj * pooled_.srr);
+
+    est_.angleDeg = theta * 57.2957795f;
+    est_.pooledCorr = (denom > 1e-9f) ? num / denom : 0.0f;
+
+    // Track the last few pooled angles to see whether the estimate has settled.
+    if (historyCount_ == kMaxHistory) {
+        for (int i = 1; i < kMaxHistory; i++) history_[i - 1] = history_[i];
+        historyCount_--;
+    }
+    history_[historyCount_++] = est_.angleDeg;
+
+    bool enoughWindows = est_.windows >= minWindows_;
+    bool strongEnough = est_.pooledCorr >= minPooledCorr_;
+    bool stable = false;
+    if (historyCount_ >= stableCount_) {
+        stable = true;
+        for (int i = historyCount_ - stableCount_; i < historyCount_; i++) {
+            if (angularDiffDeg(history_[i], est_.angleDeg) > stableToleranceDeg_) { stable = false; break; }
+        }
+    }
+
+    est_.locked = enoughWindows && strongEnough && stable;
+    return est_;
+}

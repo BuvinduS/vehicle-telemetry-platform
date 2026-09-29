@@ -37,6 +37,14 @@ static const unsigned long PUBLISH_INTERVAL_MS = 100;
 // purposes. Not exactly 0 since OBD speed can be noisy/rounded.
 static const float STATIONARY_SPEED_THRESHOLD_KMH = 1.0f;
 
+// Reference acceleration is speed change between two accepted OBD readings. Speed is
+// quantized to 1 km/h and its value changes at irregular instants, so:
+//  - a baseline shorter than MIN gives artifacts (1 km/h in 0.1 s "=" 2.8 m/s^2);
+//  - a baseline longer than MAX (e.g. the first change after a long plateau) is stale,
+//    so it is discarded and the baseline is simply re-anchored.
+static const float MIN_REFERENCE_INTERVAL_S = 1.0f;
+static const float MAX_REFERENCE_INTERVAL_S = 3.0f;
+
 // ---------------------------------------------------------------------------
 // Globals
 // ---------------------------------------------------------------------------
@@ -122,11 +130,14 @@ void setup() {
     calibManager = new CalibrationManager(
         loadedCalib,
         /*requiredStationarySamples=*/20,
-        /*requiredConsistentYawEvents=*/3,
+        /*minYawWindows=*/6,            // pool at least this many windows before locking
         /*yawTriggerThreshold=*/0.15f,
-        /*yawEndThreshold=*/0.05f,   // effectively unused now: real updates never read this low
+        /*yawEndThreshold=*/0.05f,     // effectively unused: real updates never read this low
         /*yawMinSamplesToAnalyze=*/6,
-        /*yawMaxSamplesPerEvent=*/8  // fixed window of ~8 real OBD updates (~8s of changing speed)
+        /*yawMaxSamplesPerEvent=*/8,   // fixed window of ~8 reference samples
+        /*staleTiltThresholdDeg=*/15.0f,
+        /*minPooledCorr=*/0.50f,       // sweep-validated: 200/200 locks, 0 false locks on pure noise
+        /*headingToleranceDeg=*/10.0f  // last N pooled estimates must agree within this before locking
     );
     prevTimestampSec = millis() / 1000.0f;
 
@@ -209,16 +220,28 @@ void loop() {
             // is allowed to buffer.
             bool isFreshReferenceSample = false;
             if (obdData.speed_valid) {
+                float nowSeconds = now / 1000.0f;
                 if (obdData.speed_kmh != prevSpeedKmh) {
-                    float nowSeconds = now / 1000.0f;
-                    lastReferenceAccel = differentiateSpeedStep(prevSpeedKmh, prevTimestampSec,
-                                                                 obdData.speed_kmh, nowSeconds);
-                    prevSpeedKmh = obdData.speed_kmh;
-                    prevTimestampSec = nowSeconds;
-                    isFreshReferenceSample = true;
+                    float dt = nowSeconds - prevTimestampSec;
+                    if (dt >= MAX_REFERENCE_INTERVAL_S) {
+                        // First change after a long plateau: dt is meaningless. Re-anchor only,
+                        // and restart the accel average so it spans the same interval as the
+                        // next reference value will.
+                        prevSpeedKmh = obdData.speed_kmh;
+                        prevTimestampSec = nowSeconds;
+                        accSumX = accSumY = accSumZ = 0; accCount = 0;
+                    } else if (dt >= MIN_REFERENCE_INTERVAL_S) {
+                        lastReferenceAccel = differentiateSpeedStep(prevSpeedKmh, prevTimestampSec,
+                                                                     obdData.speed_kmh, nowSeconds);
+                        prevSpeedKmh = obdData.speed_kmh;
+                        prevTimestampSec = nowSeconds;
+                        isFreshReferenceSample = true;
+                    }
+                    // else: changed again too soon -- keep waiting; the baseline stays put so
+                    // the eventual sample spans at least MIN_REFERENCE_INTERVAL_S.
                 }
-                // else: stale repeat. lastReferenceAccel is kept only so the
-                // debug print stays readable; the detector ignores this tick.
+                // else: unchanged. lastReferenceAccel is kept only so the debug print stays
+                // readable; the detector ignores these ticks.
             } else {
                 lastReferenceAccel = 0.0f; // OBD itself invalid -- nothing to hold onto
             }
@@ -256,11 +279,11 @@ void loop() {
             const YawEventDetector& yd = calibManager->yawDetector();
             if (yd.windowsCompleted() != lastPrintedWindows) {
                 lastPrintedWindows = yd.windowsCompleted();
-                debugLog("[YAW] window %d: corrX=%.2f corrY=%.2f | angle=%.0fdeg proj=%.2f | pick=%d\n",
-                              yd.windowsCompleted(),
-                              yd.lastCorrelation().corrWithX, yd.lastCorrelation().corrWithY,
-                              yd.lastHeadingFit().angleDeg, yd.lastHeadingFit().projectedCorr,
-                              static_cast<int>(yd.lastCandidate().axis)); // 0=X 1=Y 2=Undetermined
+                const HeadingEstimate& he = calibManager->headingEstimate();
+                debugLog("[YAW] window %d: this=%.0fdeg (proj %.2f) | POOLED angle=%.0fdeg corr=%.2f n=%d %s\n",
+                         yd.windowsCompleted(),
+                         yd.lastHeadingFit().angleDeg, yd.lastHeadingFit().projectedCorr,
+                         he.angleDeg, he.pooledCorr, he.windows, he.locked ? "LOCKED" : "");
             }
 
             Vector3 correctedVec = calibManager->getCorrectedAccel(rawVec);

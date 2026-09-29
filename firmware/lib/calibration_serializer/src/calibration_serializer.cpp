@@ -4,7 +4,7 @@
 namespace {
 
 constexpr uint8_t kMagic[4] = {'C', 'A', 'L', '1'};
-constexpr uint8_t kVersion = 1;
+constexpr uint8_t kVersion = 2;
 
 void writeFloat(uint8_t* buf, size_t& offset, float value) {
     memcpy(buf + offset, &value, sizeof(float));
@@ -40,8 +40,7 @@ size_t serializeCalibration(const CalibrationData& data, uint8_t* buffer, size_t
             writeFloat(buffer, offset, data.tiltCorrection.m[i][j]);
 
     buffer[offset++] = data.yawValid ? 1 : 0;
-    buffer[offset++] = static_cast<uint8_t>(data.yawAxis);
-    writeFloat(buffer, offset, data.yawForwardSign);
+    writeFloat(buffer, offset, data.yawAngleDeg);
 
     uint8_t checksum = computeChecksum(buffer, offset);
     buffer[offset++] = checksum;
@@ -68,8 +67,7 @@ bool deserializeCalibration(const uint8_t* buffer, size_t bufferSize, Calibratio
             outData.tiltCorrection.m[i][j] = readFloat(buffer, offset);
 
     outData.yawValid = buffer[offset++] != 0;
-    outData.yawAxis = static_cast<LongitudinalAxis>(buffer[offset++]);
-    outData.yawForwardSign = readFloat(buffer, offset);
+    outData.yawAngleDeg = readFloat(buffer, offset);
 
     return true;
 }

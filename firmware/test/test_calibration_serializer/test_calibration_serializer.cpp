@@ -11,8 +11,7 @@ void test_roundtrip_full_calibration(void) {
     original.tiltValid = true;
     original.tiltCorrection = computeTiltCorrection({6.9f, 0.0f, 6.9f});
     original.yawValid = true;
-    original.yawAxis = LongitudinalAxis::Y;
-    original.yawForwardSign = -1.0f;
+    original.yawAngleDeg = 165.0f;
 
     uint8_t buffer[kCalibrationBlobSize];
     size_t written = serializeCalibration(original, buffer, kCalibrationBlobSize);
@@ -24,8 +23,7 @@ void test_roundtrip_full_calibration(void) {
 
     TEST_ASSERT_TRUE(restored.tiltValid);
     TEST_ASSERT_TRUE(restored.yawValid);
-    TEST_ASSERT_TRUE(restored.yawAxis == LongitudinalAxis::Y);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, restored.yawForwardSign);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 165.0f, restored.yawAngleDeg);
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
             TEST_ASSERT_FLOAT_WITHIN(0.0001f, original.tiltCorrection.m[i][j], restored.tiltCorrection.m[i][j]);
@@ -68,8 +66,7 @@ void test_corrupted_byte_fails_checksum(void) {
     original.tiltValid = true;
     original.tiltCorrection = computeTiltCorrection({0, 0, 9.81f});
     original.yawValid = true;
-    original.yawAxis = LongitudinalAxis::X;
-    original.yawForwardSign = 1.0f;
+    original.yawAngleDeg = 30.0f;
 
     uint8_t buffer[kCalibrationBlobSize];
     serializeCalibration(original, buffer, kCalibrationBlobSize);
@@ -107,6 +104,17 @@ void test_buffer_too_small_fails_cleanly(void) {
     TEST_ASSERT_FALSE(ok);
 }
 
+// A blob written by the previous format (version byte 1, 49 bytes) must be rejected,
+// not misread with the new layout -- the caller just treats it as "nothing stored".
+void test_old_format_v1_blob_is_rejected(void) {
+    uint8_t buffer[kCalibrationBlobSize];
+    CalibrationData original;
+    serializeCalibration(original, buffer, kCalibrationBlobSize);
+    buffer[4] = 1; // pretend it's the old version
+    CalibrationData restored;
+    TEST_ASSERT_FALSE(deserializeCalibration(buffer, kCalibrationBlobSize, restored));
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_roundtrip_full_calibration);
@@ -115,5 +123,6 @@ int main(int argc, char **argv) {
     RUN_TEST(test_corrupted_byte_fails_checksum);
     RUN_TEST(test_wrong_version_is_rejected);
     RUN_TEST(test_buffer_too_small_fails_cleanly);
+    RUN_TEST(test_old_format_v1_blob_is_rejected);
     return UNITY_END();
 }

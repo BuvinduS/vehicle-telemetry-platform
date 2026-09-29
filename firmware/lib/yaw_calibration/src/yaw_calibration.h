@@ -90,3 +90,59 @@ private:
     YawCandidate lastCandidate_;
     bool hasLastCandidate_;
 };
+
+// ---------------------------------------------------------------------------
+// Pooled continuous-heading estimation (used by CalibrationManager).
+//
+// Per-window correlations are too noisy on their own: the OBD reference is coarse
+// and vibration dominates weak events. Instead each completed window contributes its
+// raw covariance sums, and one heading is estimated from ALL windows pooled together.
+// Strong accel/brake events carry large covariance, so they dominate naturally; weak
+// noise-only windows barely move the estimate. Yaw is a continuous angle, so a mount at
+// any orientation works (no axis-aligned assumption).
+// ---------------------------------------------------------------------------
+
+// Mean-removed sums for one window: covariance of each accel axis with the reference,
+// plus the variance sums needed to turn a pooled direction into a correlation.
+struct WindowStats {
+    float covXR, covYR;   // sum (x-mx)(r-mr), sum (y-my)(r-mr)
+    float sxx, syy, sxy;  // sum (x-mx)^2, (y-my)^2, (x-mx)(y-my)
+    float srr;            // sum (r-mr)^2
+};
+WindowStats computeWindowStats(const float* accelX, const float* accelY,
+                               const float* referenceAccel, size_t sampleCount);
+
+struct HeadingEstimate {
+    float angleDeg = 0.0f;     // forward direction, degrees from +X toward +Y (-180..180)
+    float pooledCorr = 0.0f;   // correlation of accel projected on that direction vs reference
+    int   windows = 0;         // windows pooled so far
+    bool  locked = false;
+};
+
+class HeadingTracker {
+public:
+    // minWindows: pool at least this many windows before locking.
+    // minPooledCorr: required pooled correlation along the estimated direction.
+    // stableToleranceDeg / stableCount: the last stableCount pooled estimates must all
+    //   lie within stableToleranceDeg of the newest one (i.e. the answer has settled).
+    HeadingTracker(int minWindows = 5, float minPooledCorr = 0.4f,
+                   float stableToleranceDeg = 12.0f, int stableCount = 3);
+
+    // Add one completed window. Once locked, further windows are ignored until reset().
+    const HeadingEstimate& addWindow(const WindowStats& w);
+    const HeadingEstimate& current() const { return est_; }
+    void reset();
+
+private:
+    static constexpr int kMaxHistory = 8;
+
+    int   minWindows_;
+    float minPooledCorr_;
+    float stableToleranceDeg_;
+    int   stableCount_;
+
+    WindowStats pooled_;
+    HeadingEstimate est_;
+    float history_[kMaxHistory];
+    int   historyCount_;
+};

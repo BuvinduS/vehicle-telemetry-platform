@@ -11,19 +11,21 @@ CalibrationState initialStateFor(const CalibrationData& data) {
 
 CalibrationManager::CalibrationManager(const CalibrationData& loaded,
                                         size_t requiredStationarySamples,
-                                        int requiredConsistentYawEvents,
+                                        int minYawWindows,
                                         float yawTriggerThreshold,
                                         float yawEndThreshold,
                                         size_t yawMinSamplesToAnalyze,
                                         size_t yawMaxSamplesPerEvent,
-                                        float staleTiltThresholdDeg)
+                                        float staleTiltThresholdDeg,
+                                        float minPooledCorr,
+                                        float headingToleranceDeg)
     : data_(loaded),
       state_(initialStateFor(loaded)),
       gravityAverager_(requiredStationarySamples),
       staleCheckAverager_(requiredStationarySamples),
       staleTiltThresholdDeg_(staleTiltThresholdDeg),
       yawEventDetector_(yawTriggerThreshold, yawEndThreshold, yawMinSamplesToAnalyze, yawMaxSamplesPerEvent),
-      yawTracker_(requiredConsistentYawEvents) {}
+      headingTracker_(minYawWindows, minPooledCorr, headingToleranceDeg) {}
 
 bool CalibrationManager::recomputeTiltIfStale(Vector3 g) {
     // Ignore implausible readings (sensor glitch, or not really stationary): gravity
@@ -43,9 +45,8 @@ bool CalibrationManager::recomputeTiltIfStale(Vector3 g) {
     data_.tiltCorrection = computeTiltCorrection(g);
     data_.tiltValid = true;
     data_.yawValid = false;
-    data_.yawAxis = LongitudinalAxis::Undetermined;
-    data_.yawForwardSign = 1.0f;
-    yawTracker_.reset();
+    data_.yawAngleDeg = 0.0f;
+    headingTracker_.reset();
     yawEventDetector_.restart();
     state_ = CalibrationState::NeedsYaw;
     tiltAutoResets_++;
@@ -82,11 +83,12 @@ bool CalibrationManager::update(Vector3 rawAccel, bool isStationary, float refer
                                                             candidate);
             if (!eventCompleted) return false;
 
-            YawCalibrationResult result = yawTracker_.addEvent(candidate);
-            if (!result.locked) return false;
+            // The window's per-axis pick is only diagnostic now; what counts is its raw
+            // covariance, pooled with every earlier window (strong events dominate).
+            const HeadingEstimate& est = headingTracker_.addWindow(yawEventDetector_.lastWindowStats());
+            if (!est.locked) return false;
 
-            data_.yawAxis = result.candidate.axis;
-            data_.yawForwardSign = result.candidate.forwardSign;
+            data_.yawAngleDeg = est.angleDeg;
             data_.yawValid = true;
             state_ = CalibrationState::Ready;
             return true; // worth persisting: yaw just locked
@@ -104,9 +106,11 @@ Vector3 CalibrationManager::getCorrectedAccel(Vector3 rawAccel) const {
     Vector3 tiltCorrected = applyCorrection(data_.tiltCorrection, rawAccel);
     if (!data_.yawValid) return tiltCorrected; // tilt-only until yaw locks in
 
-    float longitudinal = (data_.yawAxis == LongitudinalAxis::Y ? tiltCorrected.y : tiltCorrected.x)
-                          * data_.yawForwardSign;
-    float lateral = (data_.yawAxis == LongitudinalAxis::Y ? tiltCorrected.x : tiltCorrected.y);
+    // Rotate the horizontal plane so +x is the estimated forward direction.
+    float theta = data_.yawAngleDeg * 0.0174532925f;
+    float c = cosf(theta), s = sinf(theta);
+    float forward = c * tiltCorrected.x + s * tiltCorrected.y;
+    float lateral = -s * tiltCorrected.x + c * tiltCorrected.y;
 
-    return { longitudinal, lateral, tiltCorrected.z };
+    return { forward, lateral, tiltCorrected.z };
 }

@@ -14,14 +14,14 @@ struct CalibrationData {
     bool tiltValid = false;
     RotationMatrix tiltCorrection = identityRotation();
     bool yawValid = false;
-    LongitudinalAxis yawAxis = LongitudinalAxis::Undetermined;
-    float yawForwardSign = 1.0f;
+    float yawAngleDeg = 0.0f; // forward direction in the tilt-corrected plane, deg from +X toward +Y
 };
 
-// Fixed blob size: 4 (magic) + 1 (version) + 1 (tiltValid) + 36 (9
-// floats) + 1 (yawValid) + 1 (yawAxis) + 4 (yawForwardSign) + 1
-// (checksum) = 49 bytes.
-constexpr size_t kCalibrationBlobSize = 49;
+// Fixed blob size (format v2): 4 (magic) + 1 (version) + 1 (tiltValid) + 36 (9
+// floats) + 1 (yawValid) + 4 (yawAngleDeg) + 1 (checksum) = 48 bytes.
+// v1 stored a discrete axis + sign and was 49 bytes; old blobs are simply rejected
+// (treated as "nothing stored") and re-learned.
+constexpr size_t kCalibrationBlobSize = 48;
 
 // Serializes into buffer (must be >= kCalibrationBlobSize). Returns
 // kCalibrationBlobSize on success, 0 if buffer is too small.
