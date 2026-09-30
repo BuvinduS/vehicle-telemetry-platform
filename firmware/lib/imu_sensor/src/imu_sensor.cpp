@@ -27,6 +27,12 @@ bool IMUSensor::begin(int sda_pin, int scl_pin) {
     // Set accel range to ±2g (default, most sensitive)
     s_mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
 
+    // Hardware low-pass: suppress engine/road vibration before it is sampled.
+    // Reads happen at 10 Hz, so anything above ~5 Hz would alias into wobble.
+    s_mpu.setDLPFMode(MPU6050_DLPF_BW_10);
+
+    Serial.println(s_mpu.getDLPFMode());
+
     _ready = true;
     Serial.println(F("[IMU] Ready."));
     return true;
