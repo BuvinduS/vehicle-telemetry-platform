@@ -11,6 +11,11 @@
 #include "calibration_nvs.h"
 #include "calibration_manager.h"
 
+// Set to 1 (or build with -DENABLE_UDP_DEBUG=1) to mirror debug lines to the dev machine over UDP.
+#ifndef ENABLE_UDP_DEBUG
+#define ENABLE_UDP_DEBUG 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Configuration — update these for your environment
 // ---------------------------------------------------------------------------
@@ -23,7 +28,7 @@ static const uint16_t BROKER_PORT = 1883;
 static const int SDA_PIN = 21;
 static const int SCL_PIN = 20;
 
-// --- New: MCP2515 / CAN pins (confirmed, OBD2Lib-reference.md §9) ---
+// --- MCP2515 / CAN pins (confirmed, OBD2Lib-reference.md §9) ---
 static const int CAN_SCK  = 12;
 static const int CAN_MOSI = 4;
 static const int CAN_MISO = 5;
@@ -80,10 +85,12 @@ static int   lastPrintedResets = 0;  // for the stale-tilt auto-recalibration me
 // broker) over UDP, so a USB cable isn't needed during a test drive. Entirely
 // separate from MQTT: no topics, no dashboard/DB impact. Fire-and-forget.
 // On the laptop:  see the receiver one-liner in the notes for this step.
+#if ENABLE_UDP_DEBUG
 static const uint16_t DEBUG_UDP_PORT = 5005;
 static WiFiUDP   dbgUdp;
 static IPAddress dbgTarget;
 static bool      dbgTargetValid = false;
+#endif
 
 static void debugLog(const char* fmt, ...) {
     char buf[200];
@@ -93,11 +100,13 @@ static void debugLog(const char* fmt, ...) {
     va_end(args);
 
     Serial.print(buf);
+#if ENABLE_UDP_DEBUG
     if (dbgTargetValid && WiFi.status() == WL_CONNECTED) {
         dbgUdp.beginPacket(dbgTarget, DEBUG_UDP_PORT);
         dbgUdp.write(reinterpret_cast<const uint8_t*>(buf), strlen(buf));
         dbgUdp.endPacket();
     }
+#endif
 }
 static unsigned long lastStatMs = 0;
 
@@ -157,8 +166,10 @@ void setup() {
         delay(5000);
     }
 
-    dbgTargetValid = dbgTarget.fromString(BROKER_IP);
-    if (dbgTargetValid) debugLog("[DBG] wireless debug log -> %s:%u\n", BROKER_IP, DEBUG_UDP_PORT);
+    #if ENABLE_UDP_DEBUG
+        dbgTargetValid = dbgTarget.fromString(BROKER_IP);
+        if (dbgTargetValid) debugLog("[DBG] wireless debug log -> %s:%u\n", BROKER_IP, DEBUG_UDP_PORT);
+#   endif
 
     configTime(0, 0, "pool.ntp.org");
     Serial.print(F("[TIME] Syncing NTP..."));
