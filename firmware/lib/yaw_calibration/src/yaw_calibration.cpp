@@ -1,0 +1,209 @@
+#include "yaw_calibration.h"
+#include <math.h>
+
+namespace {
+constexpr float kMinCorrelationToTrust = 0.5f; // below this, event too weak/noisy to use
+constexpr float kMinCorrelationGap = 0.15f;    // require a clear winner, not a near-tie between axes
+
+float pearson(const float* a, const float* b, size_t n) {
+    if (n < 2) return 0.0f;
+
+    float meanA = 0, meanB = 0;
+    for (size_t i = 0; i < n; i++) { meanA += a[i]; meanB += b[i]; }
+    meanA /= n; meanB /= n;
+
+    float cov = 0, varA = 0, varB = 0;
+    for (size_t i = 0; i < n; i++) {
+        float da = a[i] - meanA;
+        float db = b[i] - meanB;
+        cov += da * db;
+        varA += da * da;
+        varB += db * db;
+    }
+    float denom = sqrtf(varA * varB);
+    if (denom < 1e-6f) return 0.0f; // no variance in one signal -- can't correlate
+    return cov / denom;
+}
+
+} // namespace
+
+void differentiateSpeedToAccel(const float* speedKmh, const float* timestampSec,
+                                size_t n, float* outAccelMs2) {
+    if (n == 0) return;
+    outAccelMs2[0] = 0.0f;
+    for (size_t i = 1; i < n; i++) {
+        float dv = (speedKmh[i] - speedKmh[i - 1]) / 3.6f; // km/h -> m/s
+        float dt = timestampSec[i] - timestampSec[i - 1];
+        outAccelMs2[i] = (dt > 1e-3f) ? (dv / dt) : 0.0f;
+    }
+}
+
+EventCorrelation correlateEvent(const float* ax, const float* ay, const float* ref, size_t n) {
+    return { pearson(ax, ref, n), pearson(ay, ref, n) };
+}
+
+YawCandidate candidateFromCorrelation(const EventCorrelation& corr) {
+    float absX = fabsf(corr.corrWithX);
+    float absY = fabsf(corr.corrWithY);
+
+    float strongest = absX > absY ? absX : absY;
+    float gap = fabsf(absX - absY);
+
+    if (strongest < kMinCorrelationToTrust || gap < kMinCorrelationGap) {
+        return { LongitudinalAxis::Undetermined, 0.0f };
+    }
+
+    if (absX > absY) {
+        return { LongitudinalAxis::X, corr.corrWithX >= 0 ? 1.0f : -1.0f };
+    }
+    return { LongitudinalAxis::Y, corr.corrWithY >= 0 ? 1.0f : -1.0f };
+}
+
+YawCalibrationTracker::YawCalibrationTracker(int requiredConsistentEvents)
+    : requiredConsistentEvents_(requiredConsistentEvents),
+      consistentCount_(0),
+      lastCandidate_{LongitudinalAxis::Undetermined, 0.0f},
+      hasLastCandidate_(false) {}
+
+YawCalibrationResult YawCalibrationTracker::addEvent(const YawCandidate& candidate) {
+    if (candidate.axis == LongitudinalAxis::Undetermined) {
+        // Weak/ambiguous event -- ignore it, don't burn an existing streak on noise.
+        return { false, lastCandidate_ };
+    }
+
+    bool matches = hasLastCandidate_ &&
+                   candidate.axis == lastCandidate_.axis &&
+                   candidate.forwardSign == lastCandidate_.forwardSign;
+
+    consistentCount_ = matches ? (consistentCount_ + 1) : 1; // mismatch starts a fresh streak
+
+    lastCandidate_ = candidate;
+    hasLastCandidate_ = true;
+
+    bool locked = consistentCount_ >= requiredConsistentEvents_;
+    return { locked, lastCandidate_ };
+}
+
+void YawCalibrationTracker::reset() {
+    consistentCount_ = 0;
+    hasLastCandidate_ = false;
+    lastCandidate_ = { LongitudinalAxis::Undetermined, 0.0f };
+}
+
+HeadingFit fitHeading(const float* ax, const float* ay, const float* ref, size_t n) {
+    HeadingFit fit = {0.0f, 0.0f};
+    if (n < 2) return fit;
+    if (n > 128) n = 128; // matches YawEventDetector's fixed buffer capacity
+
+    float meanX = 0, meanY = 0, meanR = 0;
+    for (size_t i = 0; i < n; i++) { meanX += ax[i]; meanY += ay[i]; meanR += ref[i]; }
+    meanX /= n; meanY /= n; meanR /= n;
+
+    // Covariance of each axis with the reference. The direction (covX, covY)
+    // is the horizontal direction along which accel best tracks the reference.
+    float covX = 0, covY = 0;
+    for (size_t i = 0; i < n; i++) {
+        float dr = ref[i] - meanR;
+        covX += (ax[i] - meanX) * dr;
+        covY += (ay[i] - meanY) * dr;
+    }
+    if (fabsf(covX) < 1e-9f && fabsf(covY) < 1e-9f) return fit;
+
+    float theta = atan2f(covY, covX);
+    fit.angleDeg = theta * 57.2957795f;
+
+    float c = cosf(theta), s = sinf(theta);
+    float projected[128];
+    for (size_t i = 0; i < n; i++) projected[i] = c * ax[i] + s * ay[i];
+    fit.projectedCorr = pearson(projected, ref, n);
+    return fit;
+}
+
+// ---------------------------------------------------------------------------
+// Pooled continuous-heading estimation
+// ---------------------------------------------------------------------------
+
+WindowStats computeWindowStats(const float* ax, const float* ay, const float* ref, size_t n) {
+    WindowStats s = {0, 0, 0, 0, 0, 0};
+    if (n < 2) return s;
+
+    float mx = 0, my = 0, mr = 0;
+    for (size_t i = 0; i < n; i++) { mx += ax[i]; my += ay[i]; mr += ref[i]; }
+    mx /= n; my /= n; mr /= n;
+
+    for (size_t i = 0; i < n; i++) {
+        float dx = ax[i] - mx, dy = ay[i] - my, dr = ref[i] - mr;
+        s.covXR += dx * dr;
+        s.covYR += dy * dr;
+        s.sxx += dx * dx;
+        s.syy += dy * dy;
+        s.sxy += dx * dy;
+        s.srr += dr * dr;
+    }
+    return s;
+}
+
+namespace {
+float angularDiffDeg(float a, float b) {
+    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f;
+    return fabsf(d);
+}
+} // namespace
+
+HeadingTracker::HeadingTracker(int minWindows, float minPooledCorr,
+                               float stableToleranceDeg, int stableCount)
+    : minWindows_(minWindows),
+      minPooledCorr_(minPooledCorr),
+      stableToleranceDeg_(stableToleranceDeg),
+      stableCount_(stableCount > kMaxHistory ? kMaxHistory : stableCount) {
+    reset();
+}
+
+void HeadingTracker::reset() {
+    pooled_ = {0, 0, 0, 0, 0, 0};
+    est_ = HeadingEstimate();
+    historyCount_ = 0;
+}
+
+const HeadingEstimate& HeadingTracker::addWindow(const WindowStats& w) {
+    if (est_.locked) return est_;
+
+    pooled_.covXR += w.covXR;
+    pooled_.covYR += w.covYR;
+    pooled_.sxx += w.sxx;
+    pooled_.syy += w.syy;
+    pooled_.sxy += w.sxy;
+    pooled_.srr += w.srr;
+    est_.windows++;
+
+    if (fabsf(pooled_.covXR) < 1e-9f && fabsf(pooled_.covYR) < 1e-9f) return est_; // no signal yet
+
+    float theta = atan2f(pooled_.covYR, pooled_.covXR);
+    float c = cosf(theta), s = sinf(theta);
+    float num = c * pooled_.covXR + s * pooled_.covYR;
+    float varProj = c * c * pooled_.sxx + 2 * c * s * pooled_.sxy + s * s * pooled_.syy;
+    float denom = sqrtf(varProj * pooled_.srr);
+
+    est_.angleDeg = theta * 57.2957795f;
+    est_.pooledCorr = (denom > 1e-9f) ? num / denom : 0.0f;
+
+    // Track the last few pooled angles to see whether the estimate has settled.
+    if (historyCount_ == kMaxHistory) {
+        for (int i = 1; i < kMaxHistory; i++) history_[i - 1] = history_[i];
+        historyCount_--;
+    }
+    history_[historyCount_++] = est_.angleDeg;
+
+    bool enoughWindows = est_.windows >= minWindows_;
+    bool strongEnough = est_.pooledCorr >= minPooledCorr_;
+    bool stable = false;
+    if (historyCount_ >= stableCount_) {
+        stable = true;
+        for (int i = historyCount_ - stableCount_; i < historyCount_; i++) {
+            if (angularDiffDeg(history_[i], est_.angleDeg) > stableToleranceDeg_) { stable = false; break; }
+        }
+    }
+
+    est_.locked = enoughWindows && strongEnough && stable;
+    return est_;
+}
