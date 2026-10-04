@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# dev.sh — launch the telemetry stack for local development
-# Usage: ./dev.sh [--no-ingestor]
+# dev.sh — launch the telemetry stack
+# Usage: ./dev.sh [--no-ingestor] [--prod]
+#   --prod  run the built dashboard (next start) and the bridge without --reload
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PI_DIR="$ROOT/pi"
 FRONTEND_DIR="$PI_DIR/dashboard/frontend"
 
+# Per-machine config (gitignored). Optional: without it, code defaults apply.
 if [[ -f "$PI_DIR/.env" ]]; then
   set -a
   source "$PI_DIR/.env"
@@ -27,16 +29,6 @@ if $PROD && [[ ! -f "$FRONTEND_DIR/.next/BUILD_ID" ]]; then
   exit 1
 fi
 
-UVICORN_ARGS=(--host 0.0.0.0 --port 8000)
-$PROD || UVICORN_ARGS+=(--reload)
-( cd "$PI_DIR" && exec .venv/bin/uvicorn dashboard.backend.main:app "${UVICORN_ARGS[@]}" ) &
-
-if $PROD; then
-  ( cd "$FRONTEND_DIR" && exec npm run start -- -p 3001 ) &
-else
-  ( cd "$FRONTEND_DIR" && exec npm run dev ) &
-fi
-
 # Ctrl+C (or any exit) stops everything this script started
 cleanup() {
   trap '' INT TERM     # ignore repeat signals while shutting down
@@ -47,12 +39,18 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
+UVICORN_ARGS=(--host 0.0.0.0 --port 8000)
+$PROD || UVICORN_ARGS+=(--reload)
+
 echo "[dev] starting FastAPI bridge (:8000)"
-( cd "$PI_DIR" && exec .venv/bin/uvicorn dashboard.backend.main:app \
-    --reload --host 0.0.0.0 --port 8000 ) &
+( cd "$PI_DIR" && exec .venv/bin/uvicorn dashboard.backend.main:app "${UVICORN_ARGS[@]}" ) &
 
 echo "[dev] starting dashboard"
-( cd "$FRONTEND_DIR" && exec npm run dev ) &
+if $PROD; then
+  ( cd "$FRONTEND_DIR" && exec npm run start -- -p 3001 ) &
+else
+  ( cd "$FRONTEND_DIR" && exec npm run dev ) &
+fi
 
 if $RUN_INGESTOR; then
   echo "[dev] starting ingestor"
