@@ -6,6 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PI_DIR="$ROOT/pi"
 FRONTEND_DIR="$PI_DIR/dashboard/frontend"
 
+if [[ -f "$PI_DIR/.env" ]]; then
+  set -a
+  source "$PI_DIR/.env"
+  set +a
+fi
+
 RUN_INGESTOR=true
 [[ "${1:-}" == "--no-ingestor" ]] && RUN_INGESTOR=false
 
