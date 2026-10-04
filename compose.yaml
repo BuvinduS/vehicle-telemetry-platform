@@ -36,7 +36,7 @@ services:
       - grafana-data:/var/lib/grafana
 
   mosquitto:
-    image: eclipse-mosquitto:2.1.2
+    image: eclipse-mosquitto:2
     container_name: vtp-mosquitto
     restart: unless-stopped
     ports:
