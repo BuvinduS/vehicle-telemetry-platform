@@ -13,7 +13,29 @@ if [[ -f "$PI_DIR/.env" ]]; then
 fi
 
 RUN_INGESTOR=true
-[[ "${1:-}" == "--no-ingestor" ]] && RUN_INGESTOR=false
+PROD=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-ingestor) RUN_INGESTOR=false ;;
+    --prod)        PROD=true ;;
+    *) echo "usage: ./dev.sh [--no-ingestor] [--prod]" >&2; exit 2 ;;
+  esac
+done
+
+if $PROD && [[ ! -f "$FRONTEND_DIR/.next/BUILD_ID" ]]; then
+  echo "[dev] no production build — run: (cd $FRONTEND_DIR && npm run build)" >&2
+  exit 1
+fi
+
+UVICORN_ARGS=(--host 0.0.0.0 --port 8000)
+$PROD || UVICORN_ARGS+=(--reload)
+( cd "$PI_DIR" && exec .venv/bin/uvicorn dashboard.backend.main:app "${UVICORN_ARGS[@]}" ) &
+
+if $PROD; then
+  ( cd "$FRONTEND_DIR" && exec npm run start -- -p 3001 ) &
+else
+  ( cd "$FRONTEND_DIR" && exec npm run dev ) &
+fi
 
 # Ctrl+C (or any exit) stops everything this script started
 cleanup() {
