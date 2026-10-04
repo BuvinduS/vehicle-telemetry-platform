@@ -8,6 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import db, mqtt_bridge
 from .routers import sessions, ws
 
+import os
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:3001")
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,7 +28,7 @@ app = FastAPI(title="Vehicle Telemetry Platform API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001"],
+    allow_origins=_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
