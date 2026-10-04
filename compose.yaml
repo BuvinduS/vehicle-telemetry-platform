@@ -3,7 +3,7 @@
 
 services:
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.28.1-pg16
     container_name: vtp-analytics-db
     restart: unless-stopped
     ports:
@@ -17,7 +17,7 @@ services:
       - timescaledb-data:/var/lib/postgresql/data
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.1.0
     container_name: vtp-grafana
     restart: unless-stopped
     ports:
@@ -36,7 +36,7 @@ services:
       - grafana-data:/var/lib/grafana
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.1.2
     container_name: vtp-mosquitto
     restart: unless-stopped
     ports:
