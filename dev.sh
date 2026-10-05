@@ -31,6 +31,7 @@ fi
 
 # Ctrl+C (or any exit) stops everything this script started
 cleanup() {
+  STOPPING=1
   trap '' INT TERM     # ignore repeat signals while shutting down
   trap - EXIT
   echo "[dev] shutting down..."
@@ -59,4 +60,15 @@ else
   echo "[dev] ingestor skipped"
 fi
 
-wait
+if $PROD; then
+  # Supervised mode (systemd): if any service dies, stop the rest and exit
+  # non-zero so Restart= brings the whole stack back up. This also covers
+  # boot-time readiness: the bridge exits until Postgres accepts connections.
+  wait -n
+  if [[ -z "${STOPPING:-}" ]]; then
+    echo "[dev] a service exited unexpectedly — stopping the stack" >&2
+    exit 1
+  fi
+else
+  wait
+fi
