@@ -8,7 +8,7 @@ import SessionPanel from "@/components/SessionPanel";
 import CollapsiblePanel from "@/components/CollapsiblePanel";
 import { useTelemetryContext } from "@/lib/telemetry-context";
 import { useViewMode } from "@/lib/view-mode";
-import AdvancedTable from "@/components/AdvancedTable";
+import SessionSummaryOverlay from "@/components/SessionSummaryOverlay";
 
 export default function LiveDashboard() {
   const { telemetry, latencyMs, avgIntervalMs } = useTelemetryContext();
@@ -30,14 +30,8 @@ export default function LiveDashboard() {
         </div>
 
         <div className="flex-1 flex items-center justify-center gap-12 mt-60">
-          {viewMode === "normal" ? (
-            <>
-              <ArcGauge label="Speed" value={t?.speed_kmh ?? null} min={0} max={220} unit="km/h" size={460} />
-              <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={460} />
-            </>
-          ) : (
-            <AdvancedTable />
-          )}
+          <ArcGauge label="Speed" value={t?.speed_kmh ?? null} min={0} max={220} unit="km/h" size={460} />
+          <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={460} />
         </div>
 
         <div className="pr-4">
@@ -46,6 +40,8 @@ export default function LiveDashboard() {
           </CollapsiblePanel>
         </div>
       </div>
+
+      {viewMode === "advanced" && <SessionSummaryOverlay />}
 
       {process.env.NODE_ENV !== "production" && (
         <div className="fixed bottom-2 right-2 text-xs font-mono text-ink-dim bg-panel border border-hairline rounded px-2 py-1">
