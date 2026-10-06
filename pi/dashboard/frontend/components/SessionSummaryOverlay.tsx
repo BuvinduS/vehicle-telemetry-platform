@@ -31,14 +31,14 @@ function sessionLabel(s: Session): string {
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   const missing = value === "--";
   return (
-    <div className="flex flex-col gap-1 rounded-sm px-4 py-3" style={{ backgroundColor: "var(--color-panel-raised)" }}>
+    <div className="flex flex-col gap-1 rounded-sm px-5 py-4" style={{ backgroundColor: "var(--color-panel-raised)" }}>
       <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">{label}</span>
       <span
-        className="text-2xl tabular-nums"
+        className="text-3xl tabular-nums"
         style={{ fontFamily: MONO, color: missing ? "var(--color-ink-faint)" : "var(--color-accent)" }}
       >
         {value}
-        {unit && !missing && <span className="text-sm text-ink-dim ml-1">{unit}</span>}
+        {unit && !missing && <span className="text-xl text-ink-dim ml-1">{unit}</span>}
       </span>
     </div>
   );
@@ -47,7 +47,7 @@ function Stat({ label, value, unit }: { label: string; value: string; unit?: str
 function SpeedSparkline({ trace }: { trace: SessionSummary["speed_trace"] }) {
   if (trace.length < 2) return null;
   const W = 600;
-  const H = 80;
+  const H = 120;
   const maxV = Math.max(...trace.map((p) => p.v), 1);
   const points = trace
     .map((p, i) => `${(i / (trace.length - 1)) * W},${H - (p.v / maxV) * (H - 4) - 2}`)
@@ -55,7 +55,7 @@ function SpeedSparkline({ trace }: { trace: SessionSummary["speed_trace"] }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Speed over time</span>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-20">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-32">
         <polyline
           points={points}
           fill="none"
@@ -110,7 +110,7 @@ export default function SessionSummaryOverlay() {
   const shownError = listError ?? error;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div
         className="absolute inset-0"
         onClick={() => setViewMode("normal")}
@@ -123,7 +123,7 @@ export default function SessionSummaryOverlay() {
       />
 
       <div
-        className="relative flex flex-col gap-5 rounded-sm p-6 w-full max-w-5xl max-h-[90vh] overflow-y-auto"
+        className="relative flex flex-col gap-6 rounded-sm p-8 w-full max-w-[1500px] max-h-[94vh] overflow-y-auto"
         style={{ backgroundColor: "var(--color-panel)", border: "1px solid var(--color-hairline)" }}
       >
         <div className="flex items-center justify-between gap-4">
