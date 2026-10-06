@@ -17,8 +17,8 @@ export default function LiveDashboard() {
 
   return (
     <>
-      <div className="flex items-start gap-6 flex-1">
-        <div className="flex flex-col gap-4 pl-4">
+      <div className="flex flex-col xl:flex-row xl:items-start gap-6 flex-1">
+        <div className="flex flex-col gap-4 px-4 xl:pr-0">
           <div className="flex flex-col gap-4">
             <NumericReadout label="Throttle" value={t?.throttle_pct ?? null} unit="%" warnAt={85} />
             <NumericReadout label="Engine Load" value={t?.engine_load_pct ?? null} unit="%" warnAt={70} dangerAt={90} />
@@ -29,12 +29,12 @@ export default function LiveDashboard() {
           </div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center gap-12 mt-60">
+        <div className="order-first xl:order-none xl:flex-1 flex flex-col xl:flex-row items-center justify-center gap-6 xl:gap-12 mt-4 xl:mt-60">
           <ArcGauge label="Speed" value={t?.speed_kmh ?? null} min={0} max={220} unit="km/h" size={460} />
           <ArcGauge label="Engine" value={t?.rpm ?? null} min={0} max={7000} redline={6000} unit="rpm" size={460} />
         </div>
 
-        <div className="pr-4">
+        <div className="px-4 xl:pl-0">
           <CollapsiblePanel label="Sessions">
             <SessionPanel />
           </CollapsiblePanel>
