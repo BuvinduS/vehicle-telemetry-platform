@@ -1,10 +1,13 @@
 # pi/dashboard/routers/sessions.py
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from .. import db
 from ..schemas import SessionCreateRequest, SessionResponse
+
+from .. import db, session_stats
+from ..schemas import SessionCreateRequest, SessionResponse, SessionSummaryResponse
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -97,3 +100,51 @@ def get_session(session_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return _row_to_response(row)
+
+@router.get("/{session_id}/summary", response_model=SessionSummaryResponse)
+def get_session_summary(session_id: str):
+    """Summary stats for one session. Membership a time-range
+    join works for live and finished sessions alike."""
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM sessions WHERE id = %s", (session_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+
+            cur.execute(
+                f"""
+                SELECT {", ".join(f"t.{c}" for c in session_stats.COLUMNS)}
+                FROM telemetry t
+                JOIN sessions s
+                  ON t.time BETWEEN s.started_at AND COALESCE(s.ended_at, NOW())
+                WHERE s.id = %s
+                ORDER BY t.time
+                """,
+                (session_id,),
+            )
+            rows = cur.fetchall()
+
+    summary = session_stats.summarize(rows)
+    return {
+        "session_id": session_id,
+        **summary,
+        "speed_trace": session_stats.speed_trace(rows),
+    }
+
+@router.get("", response_model=list[SessionResponse])
+def list_sessions(limit: int = Query(50, ge=1, le=200)):
+    """Most recent sessions first, for the dashboard's session picker.
+    Includes both open and ended sessions. Capped at `limit` since the
+    picker only needs recent ones and the table grows unbounded."""
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {SELECT_COLS} FROM sessions
+                ORDER BY started_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+    return [_row_to_response(r) for r in rows]

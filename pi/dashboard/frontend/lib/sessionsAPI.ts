@@ -1,5 +1,5 @@
 import { apiBaseUrl } from "./config";
-import type { Session } from "./types";
+import type { Session, SessionSummary } from "./types";
 
 export class SessionApiError extends Error {
   status: number;
@@ -46,5 +46,15 @@ export async function endSession(sessionId: string): Promise<Session> {
 
 export async function listActiveSessions(): Promise<Session[]> {
   const res = await fetch(`${apiBaseUrl()}/sessions/active`);
+  return handle(res);
+}
+
+export async function listSessions(limit = 50): Promise<Session[]> {
+  const res = await fetch(`${apiBaseUrl()}/sessions?limit=${limit}`);
+  return handle(res);
+}
+
+export async function getSessionSummary(sessionId: string): Promise<SessionSummary> {
+  const res = await fetch(`${apiBaseUrl()}/sessions/${sessionId}/summary`);
   return handle(res);
 }
