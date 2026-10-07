@@ -27,8 +27,8 @@ export default function StatusBar() {
   const s = STATUS_COPY[status];
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ /* unchanged */ }} />
           <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: s.color }}>
@@ -36,13 +36,13 @@ export default function StatusBar() {
           </span>
         </div>
 
-        <span className="text-xl font-semibold tracking-wide text-ink">
+        <span className="text-lg xl:text-xl font-semibold tracking-wide text-ink">
           Vehicle Telemetry Platform
         </span>
 
         {vehicleInfo?.vin && (
           <span
-            className="text-xs tabular-nums text-ink-faint"
+            className="text-xs tabular-nums text-ink-faint break-all"
             style={{ fontFamily: "var(--font-geist-mono)" }}
           >
             VIN {vehicleInfo.vin}
@@ -50,7 +50,7 @@ export default function StatusBar() {
         )}
       </div>
 
-      <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <span className="text-sm tabular-nums text-ink-dim" style={{ fontFamily: "var(--font-geist-mono)" }}>
           {clock}
         </span>

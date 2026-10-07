@@ -31,14 +31,14 @@ function sessionLabel(s: Session): string {
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   const missing = value === "--";
   return (
-    <div className="flex flex-col gap-1 rounded-sm px-5 py-4" style={{ backgroundColor: "var(--color-panel-raised)" }}>
+    <div className="flex flex-col gap-1 min-w-0 rounded-sm px-3 py-3 sm:px-5 sm:py-4" style={{ backgroundColor: "var(--color-panel-raised)" }}>
       <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">{label}</span>
       <span
-        className="text-3xl tabular-nums"
+        className="text-2xl sm:text-3xl tabular-nums"
         style={{ fontFamily: MONO, color: missing ? "var(--color-ink-faint)" : "var(--color-accent)" }}
       >
         {value}
-        {unit && !missing && <span className="text-xl text-ink-dim ml-1">{unit}</span>}
+        {unit && !missing && <span className="text-base sm:text-xl text-ink-dim ml-1">{unit}</span>}
       </span>
     </div>
   );
@@ -123,17 +123,17 @@ export default function SessionSummaryOverlay() {
       />
 
       <div
-        className="relative flex flex-col gap-6 rounded-sm p-8 w-full max-w-[1500px] max-h-[94vh] overflow-y-auto"
+        className="relative flex flex-col gap-4 sm:gap-6 rounded-sm p-4 sm:p-8 w-full max-w-[1500px] max-h-[94dvh] overflow-y-auto overscroll-contain"
         style={{ backgroundColor: "var(--color-panel)", border: "1px solid var(--color-hairline)" }}
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Drive Summary</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <select
               value={session?.id ?? ""}
               onChange={(e) => setSelectedId(e.target.value)}
               disabled={sessions.length === 0}
-              className="text-sm px-3 py-2 rounded-sm"
+              className="flex-1 min-w-0 sm:flex-none text-base sm:text-sm px-3 py-2 min-h-11 sm:min-h-0 rounded-sm"
               style={{ backgroundColor: "var(--color-bg)", border: "1px solid var(--color-hairline)", color: "var(--color-ink)" }}
             >
               {sessions.map((s) => (
@@ -144,7 +144,7 @@ export default function SessionSummaryOverlay() {
             </select>
             <button
               onClick={() => setViewMode("normal")}
-              className="text-xs font-semibold uppercase tracking-widest px-3 py-2 rounded-sm"
+              className="text-xs font-semibold uppercase tracking-widest px-3 py-2 min-h-11 sm:min-h-0 shrink-0 rounded-sm"
               style={{ color: "var(--color-ink-dim)", border: "1px solid var(--color-hairline)" }}
             >
               Close ✕

@@ -46,7 +46,12 @@ export default function GForcePanel({
         style={{ backgroundColor: "var(--color-panel)", border: "1px solid var(--color-hairline)" }}
     >
         <div className="text-xl font-semibold uppercase tracking-widest text-ink-dim">G-Force</div>
-    <svg width={size*1.2} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg
+      width={size * 1.2}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ maxWidth: "100%", height: "auto", aspectRatio: `${size * 1.2} / ${size}` }}
+    >
         {rings.map((g) => (
           <circle key={g} cx={c} cy={c} r={g * scale} fill="none" stroke="var(--color-hairline)" strokeWidth={1} />
         ))}

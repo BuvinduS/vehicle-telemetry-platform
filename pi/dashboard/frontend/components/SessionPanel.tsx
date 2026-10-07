@@ -76,7 +76,7 @@ export default function SessionPanel() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Session name (optional)"
-          className="text-sm px-3 py-2 rounded-sm"
+          className="text-base xl:text-sm px-3 py-2 min-h-11 xl:min-h-0 rounded-sm"
           style={{ backgroundColor: "var(--color-bg)", border: "1px solid var(--color-hairline)", color: "var(--color-ink)" }}
         />
         <input
@@ -89,7 +89,7 @@ export default function SessionPanel() {
         <button
           type="submit"
           disabled={creating}
-          className="text-xs font-semibold uppercase tracking-widest px-4 py-2 rounded-sm disabled:opacity-40"
+          className="text-xs font-semibold uppercase tracking-widest px-4 py-2 min-h-11 xl:min-h-0 rounded-sm disabled:opacity-40"
           style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-ink)" }}
         >
           {creating ? "Starting…" : "Start session"}
@@ -104,14 +104,14 @@ export default function SessionPanel() {
           sessions.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between rounded-sm px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-sm px-3 py-2"
               style={{ backgroundColor: "var(--color-panel-raised)" }}
             >
-              <span className="text-sm text-ink">{s.name || "Untitled session"}</span>
+              <span className="min-w-0 truncate text-sm text-ink">{s.name || "Untitled session"}</span>
               <button
                 onClick={() => handleEnd(s.id)}
                 disabled={endingId === s.id}
-                className="text-xs font-semibold uppercase tracking-widest px-2 py-1 disabled:opacity-40"
+                className="shrink-0 text-xs font-semibold uppercase tracking-widest px-3 py-1 min-h-11 xl:min-h-0 disabled:opacity-40"
                 style={{ color: "var(--color-danger)" }}
               >
                 {endingId === s.id ? "Ending…" : "End"}
