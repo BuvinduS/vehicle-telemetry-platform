@@ -10,6 +10,7 @@
 #include <OBD2.h>
 #include "calibration_nvs.h"
 #include "calibration_manager.h"
+#include "secrets.h"
 
 // Set to 1 (or build with -DENABLE_UDP_DEBUG=1) to mirror debug lines to the dev machine over UDP.
 #ifndef ENABLE_UDP_DEBUG
@@ -19,9 +20,9 @@
 // ---------------------------------------------------------------------------
 // Configuration — update these for your environment
 // ---------------------------------------------------------------------------
-static const char* WIFI_SSID     = "S23_FE";
-static const char* WIFI_PASSWORD = "clbu0004";
-static const char* BROKER_IP     = "10.76.197.48";  //Dev machine IP when on the WIFI_SSID network
+// static const char* WIFI_SSID     = "S23_FE";
+// static const char* WIFI_PASSWORD = "clbu0004";
+// static const char* BROKER_IP     = "10.76.197.48";  //Dev machine IP when on the WIFI_SSID network
 static const uint16_t BROKER_PORT = 1883;
 
 // MPU6050 pins — adjust for your ESP32 board

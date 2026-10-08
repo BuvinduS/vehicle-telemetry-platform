@@ -28,6 +28,38 @@ export interface Session {
   notes: string | null;
 }
 
+export interface SpeedPoint {
+  t: string; // ISO timestamp
+  v: number; // km/h
+}
+
+// Mirrors the backend's SessionSummaryResponse. Every stat is null when
+// the session has no usable data for it; row_count === 0 means the
+// session exists but has no telemetry in its window yet.
+export interface SessionSummary {
+  session_id: string;
+  row_count: number;
+  duration_s: number | null;
+  avg_speed_kmh: number | null;
+  max_speed_kmh: number | null;
+  avg_rpm: number | null;
+  max_rpm: number | null;
+  avg_throttle_pct: number | null;
+  max_throttle_pct: number | null;
+  avg_coolant_temp_c: number | null;
+  max_coolant_temp_c: number | null;
+  avg_engine_load_pct: number | null;
+  max_abs_accel_x: number | null;
+  max_abs_accel_y: number | null;
+  distance_km: number | null;
+  idle_pct: number | null;
+  peak_g: number | null;
+  harsh_accel_count: number | null;
+  harsh_brake_count: number | null;
+  best_0_60_s: number | null;
+  speed_trace: SpeedPoint[];
+}
+
 export interface VehicleInfo {
   vin: string | null;
   make: string | null;
