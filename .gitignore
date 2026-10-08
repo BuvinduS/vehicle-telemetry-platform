@@ -31,3 +31,5 @@ analytics/models/*.pkl
 
 # plot images
 output/
+
+pi/*.png
